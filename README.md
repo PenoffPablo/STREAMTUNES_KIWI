@@ -1,4 +1,8 @@
-# StreamTunes
+<div align="center">
+  <img src="assets/images/logo.png" alt="StreamTunes Logo" width="160" />
+  <h1>StreamTunes</h1>
+  <p><strong>Plataforma nativa de streaming musical y autogestión para la escena independiente</strong></p>
+</div>
 
 StreamTunes es una plataforma nativa de streaming musical y gestión comunitaria diseñada específicamente para bandas independientes, colectivos underground y escenas autogestionadas. La aplicación combina reproducción de audio de alta fidelidad, sincronización de letras, analítica agregada para artistas, integración con pasarelas de pago y capacidades de sincronización resiliente ante entornos sin conectividad (offline-first).
 

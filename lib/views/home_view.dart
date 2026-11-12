@@ -84,12 +84,20 @@ class _HomeViewState extends State<HomeView> {
         final vm = _viewModel!;
         return Scaffold(
           appBar: AppBar(
-            title: const Row(
+            title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.graphic_eq, color: AppTheme.primary, size: 24),
-                SizedBox(width: 8),
-                Text('StreamTunes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    height: 28,
+                    width: 28,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text('StreamTunes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               ],
             ),
             actions: [

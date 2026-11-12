@@ -44,8 +44,40 @@ class _AccountViewState extends State<AccountView> {
 
   Widget _buildAuthForm(dynamic sessionVM) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SizedBox(height: 8),
+        Center(
+          child: Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  height: 96,
+                  width: 96,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'STREAMTUNES',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2.5,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Plataforma de Música Independiente',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -309,6 +341,27 @@ class _AccountViewState extends State<AccountView> {
             icon: const Icon(Icons.logout, color: AppTheme.errorRed, size: 18),
             label: const Text('Cerrar Sesión', style: TextStyle(color: AppTheme.errorRed)),
             style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.errorRed)),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  height: 36,
+                  width: 36,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'StreamTunes • Música Independiente',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 80),
