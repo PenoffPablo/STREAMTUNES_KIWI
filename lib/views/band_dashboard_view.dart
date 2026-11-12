@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:streamtunes/models/band.dart';
 import 'package:streamtunes/models/band_event.dart';
 import 'package:streamtunes/models/band_photo.dart';
 import 'package:streamtunes/models/band_stats.dart';
+import 'package:streamtunes/models/song.dart';
 import 'package:streamtunes/scopes/app_scopes.dart';
 import 'package:streamtunes/theme/app_theme.dart';
 import 'package:streamtunes/view_models/band_dashboard_view_model.dart';
@@ -116,36 +118,227 @@ class _BandDashboardViewState extends State<BandDashboardView> {
     );
   }
 
-  void _showAddPhotoDialog() {
-    final urlCtrl = TextEditingController(text: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819');
+  void _showAddPhotoDialog() async {
+    final deviceService = RepositoriesScope.of(context).deviceService;
+    final pickedPath = await deviceService.pickCoverPhoto();
+    if (pickedPath == null || !mounted) return;
+
     final capCtrl = TextEditingController();
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        title: const Text('Sumar Foto de Recital'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+        title: const Row(
           children: [
-            TextField(controller: urlCtrl, decoration: const InputDecoration(labelText: 'URL de la Foto *')),
-            const SizedBox(height: 10),
-            TextField(controller: capCtrl, decoration: const InputDecoration(labelText: 'Epígrafe (Opcional)')),
+            Icon(Icons.add_a_photo, color: AppTheme.primary, size: 20),
+            SizedBox(width: 8),
+            Text('Foto de Recital', style: TextStyle(fontSize: 16)),
           ],
         ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  File(pickedPath),
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 160,
+                    color: AppTheme.surfaceLight,
+                    child: const Center(child: Icon(Icons.image, size: 48, color: AppTheme.textSecondary)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: capCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Epígrafe o Recital (Opcional)',
+                  hintText: 'Ej. Sótano en San Telmo - Octubre',
+                ),
+              ),
+            ],
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
           ElevatedButton(
             onPressed: () async {
-              if (urlCtrl.text.trim().isNotEmpty) {
-                await _viewModel?.addPhoto(
-                  photoUrl: urlCtrl.text.trim(),
-                  caption: capCtrl.text.trim().isNotEmpty ? capCtrl.text.trim() : null,
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Subiendo foto del recital...'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              await _viewModel?.addPhoto(
+                photoUrl: pickedPath,
+                caption: capCtrl.text.trim().isNotEmpty ? capCtrl.text.trim() : null,
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: AppTheme.primary,
+                    content: Text('¡Foto añadida a la galería con éxito!'),
+                  ),
                 );
-                if (ctx.mounted) Navigator.of(ctx).pop();
               }
             },
-            child: const Text('Agregar'),
+            child: const Text('Subir Foto'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditSongDialog(Song song) {
+    final titleCtrl = TextEditingController(text: song.title);
+    final genreCtrl = TextEditingController(text: song.genre);
+    final lyricsCtrl = TextEditingController(text: song.lyricsLrc ?? '');
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: Row(
+            children: [
+              const Icon(Icons.edit_note, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Editar "${song.title}"',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(labelText: 'Título de la canción *'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: genreCtrl,
+                  decoration: const InputDecoration(labelText: 'Género musical *', hintText: 'Ej. Indie Rock, Post-punk'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: lyricsCtrl,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Letra sincronizada (LRC opcional)',
+                    hintText: '[00:15.00] Primera línea de letra...',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      final newTitle = titleCtrl.text.trim();
+                      final newGenre = genreCtrl.text.trim();
+                      if (newTitle.isEmpty || newGenre.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('El título y género no pueden estar vacíos.')),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => isSaving = true);
+                      final success = await _viewModel?.editSong(
+                        songId: song.id,
+                        title: newTitle,
+                        genre: newGenre,
+                        lyricsLrc: lyricsCtrl.text.trim().isNotEmpty ? lyricsCtrl.text.trim() : null,
+                      );
+
+                      if (ctx.mounted) {
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: success == true ? AppTheme.primary : Colors.redAccent,
+                            content: Text(
+                              success == true
+                                  ? '¡Canción "$newTitle" actualizada con éxito!'
+                                  : 'Error al actualizar la canción.',
+                              style: TextStyle(color: success == true ? Colors.black : Colors.white),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              child: isSaving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteSong(Song song) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('¿Eliminar Canción?', style: TextStyle(fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar permanentemente "${song.title}"?\n\nEsta acción borrará el tema de la plataforma y liberará tu cupo de canciones (actualmente ${_viewModel?.songs.length ?? 0}/20).',
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final success = await _viewModel?.deleteSong(song.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: success == true ? AppTheme.primary : Colors.redAccent,
+                    content: Text(
+                      success == true
+                          ? 'Canción "${song.title}" eliminada y cupo liberado.'
+                          : 'Error al eliminar la canción.',
+                      style: TextStyle(color: success == true ? Colors.black : Colors.white),
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('Eliminar'),
           ),
         ],
       ),
@@ -226,7 +419,11 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                     _buildDailyMetricsSection(stats),
                     const SizedBox(height: 16),
 
-                    // 3. Agenda de Fechas ABM
+                    // 3. Mis Canciones Subidas (Gestión, Edición y Borrado de catálogo)
+                    _buildSongsManagementCard(_viewModel!.songs),
+                    const SizedBox(height: 16),
+
+                    // 4. Agenda de Fechas ABM
                     _buildEventsCard(_viewModel!.events),
                     const SizedBox(height: 16),
 
@@ -543,6 +740,133 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                     ],
                   ),
                 )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSongsManagementCard(List<Song> songs) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'MIS CANCIONES SUBIDAS',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1,
+                  color: AppTheme.primary,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceLight,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${songs.length}/20 Temas',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Administra tu catálogo: edita el título, género o letra sincronizada (LRC), o elimina una canción si la subiste por error para liberar tu cupo.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          if (songs.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              alignment: Alignment.center,
+              child: const Text(
+                'Aún no has subido canciones con esta banda.\nUsa la pestaña "Subir" del menú inferior para publicar tu música.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontStyle: FontStyle.italic),
+              ),
+            )
+          else
+            ...songs.map((song) {
+              final minutes = song.durationSeconds ~/ 60;
+              final seconds = (song.durationSeconds % 60).toString().padLeft(2, '0');
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                color: AppTheme.surfaceLight,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      color: Colors.black26,
+                      child: song.coverUrl != null
+                          ? Image.network(
+                              song.coverUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: AppTheme.primary),
+                            )
+                          : const Icon(Icons.music_note, color: AppTheme.primary),
+                    ),
+                  ),
+                  title: Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    '${song.genre} • $minutes:$seconds • ${song.playCount} plays',
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary),
+                    onSelected: (val) {
+                      if (val == 'edit') {
+                        _showEditSongDialog(song);
+                      } else if (val == 'delete') {
+                        _confirmDeleteSong(song);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 18, color: AppTheme.primary),
+                            SizedBox(width: 10),
+                            Text('Editar metadatos'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                            SizedBox(width: 10),
+                            Text('Eliminar canción', style: TextStyle(color: Colors.redAccent)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:streamtunes/models/band.dart';
 import 'package:streamtunes/models/band_event.dart';
 import 'package:streamtunes/models/band_photo.dart';
 import 'package:streamtunes/models/band_stats.dart';
+import 'package:streamtunes/models/song.dart';
 import 'package:streamtunes/repositories/bands_repository.dart';
 import 'package:streamtunes/repositories/songs_repository.dart';
 
@@ -20,6 +21,7 @@ class BandDashboardViewModel extends ChangeNotifier {
   List<TopFanStat> _topFans = [];
   List<BandEvent> _events = [];
   List<BandPhoto> _photos = [];
+  List<Song> _songs = [];
   int _songCount = 0;
   bool _isLoading = false;
   bool _isLoadingMetrics = false;
@@ -45,6 +47,7 @@ class BandDashboardViewModel extends ChangeNotifier {
   List<TopFanStat> get topFans => List.unmodifiable(_topFans);
   List<BandEvent> get events => List.unmodifiable(_events);
   List<BandPhoto> get photos => List.unmodifiable(_photos);
+  List<Song> get songs => List.unmodifiable(_songs);
   int get songCount => _songCount;
   bool get isLoading => _isLoading;
   bool get isLoadingMetrics => _isLoadingMetrics;
@@ -134,6 +137,11 @@ class BandDashboardViewModel extends ChangeNotifier {
       _events = results[1] as List<BandEvent>;
       _photos = results[2] as List<BandPhoto>;
       _songCount = results[3] as int;
+
+      try {
+        _songs = await songsRepo.getSongsByBand(bandId);
+        _songCount = _songs.length;
+      } catch (_) {}
 
       if (statsFuture != null) {
         _stats = results[4] as BandAggregatedStats?;
@@ -356,6 +364,49 @@ class BandDashboardViewModel extends ChangeNotifier {
     } finally {
       _isExporting = false;
       notifyListeners();
+    }
+  }
+
+  /// Edita los metadatos de una canción subida por la banda (título, género, letra LRC)
+  Future<bool> editSong({
+    required String songId,
+    required String title,
+    required String genre,
+    String? lyricsLrc,
+  }) async {
+    try {
+      final existingIdx = _songs.indexWhere((s) => s.id == songId);
+      if (existingIdx == -1) return false;
+
+      final updated = _songs[existingIdx].copyWith(
+        title: title,
+        genre: genre,
+        lyricsLrc: lyricsLrc,
+      );
+
+      final saved = await songsRepo.updateSong(updated);
+      _songs[existingIdx] = saved;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error actualizando canción: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Elimina una canción subida por la banda y libera el cupo de la banda
+  Future<bool> deleteSong(String songId) async {
+    try {
+      await songsRepo.deleteSong(songId);
+      _songs.removeWhere((s) => s.id == songId);
+      _songCount = _songs.length;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error eliminando canción: $e';
+      notifyListeners();
+      return false;
     }
   }
 }

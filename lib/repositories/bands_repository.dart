@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:streamtunes/models/band.dart';
 import 'package:streamtunes/models/band_event.dart';
@@ -460,7 +461,23 @@ class SupabaseBandsRepository implements BandsRepository {
 
   @override
   Future<BandPhoto> addBandPhoto(BandPhoto photo) async {
-    final payload = photo.toJson()..remove('id');
+    String photoUrl = photo.photoUrl;
+
+    // Si es un archivo local del dispositivo, subirlo a Supabase Storage bucket 'photos'
+    if (!photoUrl.startsWith('http')) {
+      try {
+        final file = File(photoUrl);
+        if (await file.exists()) {
+          final storagePath = '${photo.bandId}/${DateTime.now().millisecondsSinceEpoch}_photo.jpg';
+          await _client.storage.from('photos').upload(storagePath, file);
+          photoUrl = _client.storage.from('photos').getPublicUrl(storagePath);
+        }
+      } catch (e) {
+        debugPrint('[SupabaseBandsRepository] Error subiendo foto a Storage: $e');
+      }
+    }
+
+    final payload = photo.copyWith(photoUrl: photoUrl).toJson()..remove('id');
     final res = await _client.from('band_photos').insert(payload).select().single();
     return BandPhoto.fromJson(res);
   }

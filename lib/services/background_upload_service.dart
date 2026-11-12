@@ -8,7 +8,7 @@ const String kNotificationChannelId = 'streamtunes_uploads_channel';
 const String kNotificationChannelName = 'Subidas StreamTunes';
 const String kNotificationChannelDesc = 'Notificaciones del estado de subida de música independiente';
 
-/// Despachador de nivel superior ejecutado en el hilo aislado de segundo plano por Workmanager (Criterio E2)
+/// Despachador de nivel superior ejecutado en el hilo aislado de segundo plano por Workmanager
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
@@ -19,7 +19,7 @@ void callbackDispatcher() {
         final title = inputData?['title'] as String? ?? 'Nuevo tema';
         final band = inputData?['band_name'] as String? ?? 'Tu banda';
 
-        // Disparar notificación nativa del sistema informando el éxito de la subida (Criterio E1)
+        // Disparar notificación nativa del sistema informando el éxito de la subida
         final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
         const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
         const initSettings = InitializationSettings(android: androidInit);

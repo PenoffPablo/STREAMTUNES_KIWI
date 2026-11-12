@@ -15,6 +15,8 @@ abstract class SongsRepository {
   Future<Album> createAlbum(Album album);
   Future<void> logPlayEvent(String songId, String bandId, String? userId, int secondsListened);
   Future<bool> isSha256Duplicate(String sha256);
+  Future<Song> updateSong(Song song);
+  Future<void> deleteSong(String songId);
 }
 
 //// Implementación en memoria determinista (Modo Dual / Offline / Pruebas)
@@ -175,6 +177,21 @@ class FakeSongsRepository implements SongsRepository {
   Future<bool> isSha256Duplicate(String sha256) async {
     if (sha256.isEmpty) return false;
     return _songs.any((s) => s.audioSha256 == sha256);
+  }
+
+  @override
+  Future<Song> updateSong(Song song) async {
+    final idx = _songs.indexWhere((s) => s.id == song.id);
+    if (idx != -1) {
+      _songs[idx] = song;
+      return song;
+    }
+    throw Exception('Canción no encontrada');
+  }
+
+  @override
+  Future<void> deleteSong(String songId) async {
+    _songs.removeWhere((s) => s.id == songId);
   }
 }
 
@@ -340,6 +357,30 @@ class SupabaseSongsRepository implements SongsRepository {
         .eq('audio_sha256', sha256)
         .maybeSingle();
     return res != null;
+  }
+
+  @override
+  Future<Song> updateSong(Song song) async {
+    final payload = {
+      'title': song.title,
+      'genre': song.genre,
+      'lyrics_lrc': song.lyricsLrc,
+      if (song.albumId != null) 'album_id': song.albumId,
+      if (song.coverUrl != null) 'cover_url': song.coverUrl,
+    };
+    final res = await _client
+        .from('songs')
+        .update(payload)
+        .eq('id', song.id)
+        .select('*, bands(name)')
+        .single();
+    final bandName = res['bands']?['name'] as String?;
+    return Song.fromJson(res, bandName: bandName);
+  }
+
+  @override
+  Future<void> deleteSong(String songId) async {
+    await _client.from('songs').delete().eq('id', songId);
   }
 }
 

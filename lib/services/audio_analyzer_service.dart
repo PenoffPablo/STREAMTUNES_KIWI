@@ -41,7 +41,7 @@ class AudioAnalyzerPayload {
 }
 
 class AudioAnalyzerService {
-  /// Ejecuta el análisis pesado de audio en un Isolate.run separado (Criterio D3)
+  /// Ejecuta el análisis pesado de audio en un Isolate.run separado
   /// Verifica cabeceras binarias (magic bytes), calcula SHA-256 y extrae 40 picos de onda.
   static Future<AudioAnalysisResult> analyzeAudio({
     String? filePath,

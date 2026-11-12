@@ -30,10 +30,17 @@ class BandPhoto {
   }
 
   factory BandPhoto.fromJson(Map<String, dynamic> json) {
+    final rawUrl = (json['photo_url'] ?? json['url']) as String? ?? '';
+    final fullUrl = (rawUrl.isNotEmpty &&
+            !rawUrl.startsWith('http') &&
+            !rawUrl.startsWith('file:'))
+        ? 'https://fajwcwabcdxetuffoiuh.supabase.co/storage/v1/object/public/photos/$rawUrl'
+        : rawUrl;
+
     return BandPhoto(
       id: json['id'] as String,
       bandId: json['band_id'] as String,
-      photoUrl: json['photo_url'] as String,
+      photoUrl: fullUrl,
       caption: json['caption'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
