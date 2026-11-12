@@ -4,6 +4,7 @@ import 'package:streamtunes/models/playlist.dart';
 import 'package:streamtunes/scopes/app_scopes.dart';
 import 'package:streamtunes/theme/app_theme.dart';
 import 'package:streamtunes/views/band_public_view.dart';
+import 'package:streamtunes/views/playlist_detail_view.dart';
 import 'package:streamtunes/widgets/empty_state_view.dart';
 
 class LibraryView extends StatefulWidget {
@@ -172,15 +173,12 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
               title: Text(pl.title, style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text('${pl.songIds.length} canciones guardadas'),
               trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
-              onTap: () async {
-                final songs = await LibraryScope.of(context).getSongsForPlaylist(pl.id);
-                if (context.mounted && songs.isNotEmpty) {
-                  PlayerScope.of(context).playSong(songs.first, queue: songs);
-                } else if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Esta playlist no tiene canciones aún. Suma temas desde el inicio.')),
-                  );
-                }
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (ctx) => PlaylistDetailView(playlist: pl),
+                  ),
+                );
               },
             ),
           );

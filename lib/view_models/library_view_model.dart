@@ -68,9 +68,10 @@ class LibraryViewModel extends ChangeNotifier {
         if (!currentSongs.contains(songId)) {
           currentSongs.add(songId);
           _playlists[idx] = _playlists[idx].copyWith(songIds: currentSongs);
-          notifyListeners();
         }
       }
+      _playlistSongsCache.remove(playlistId);
+      notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = 'Error sumando canción a playlist: $e';
@@ -79,8 +80,42 @@ class LibraryViewModel extends ChangeNotifier {
     }
   }
 
-  Future<List<Song>> getSongsForPlaylist(String playlistId) async {
-    if (_playlistSongsCache.containsKey(playlistId)) {
+  /// Quitar un tema de una playlist
+  Future<bool> removeSongFromPlaylist(String playlistId, String songId) async {
+    try {
+      await playlistsRepo.removeSongFromPlaylist(playlistId, songId);
+      final idx = _playlists.indexWhere((p) => p.id == playlistId);
+      if (idx != -1) {
+        final currentSongs = List<String>.from(_playlists[idx].songIds)..remove(songId);
+        _playlists[idx] = _playlists[idx].copyWith(songIds: currentSongs);
+      }
+      _playlistSongsCache.remove(playlistId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error quitando canción de playlist: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Eliminar una playlist completa
+  Future<bool> deletePlaylist(String playlistId) async {
+    try {
+      await playlistsRepo.deletePlaylist(playlistId);
+      _playlists.removeWhere((p) => p.id == playlistId);
+      _playlistSongsCache.remove(playlistId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error eliminando playlist: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<List<Song>> getSongsForPlaylist(String playlistId, {bool forceRefresh = false}) async {
+    if (!forceRefresh && _playlistSongsCache.containsKey(playlistId)) {
       return _playlistSongsCache[playlistId]!;
     }
     final songs = await playlistsRepo.getPlaylistSongs(playlistId);

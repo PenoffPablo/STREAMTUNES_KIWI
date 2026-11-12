@@ -8,6 +8,7 @@ abstract class PlaylistsRepository {
   Future<void> addSongToPlaylist(String playlistId, String songId);
   Future<void> removeSongFromPlaylist(String playlistId, String songId);
   Future<List<Song>> getPlaylistSongs(String playlistId);
+  Future<void> deletePlaylist(String playlistId);
 }
 
 //// Implementación en memoria determinista (Modo Dual / Offline / Pruebas)
@@ -63,7 +64,31 @@ class FakePlaylistsRepository implements PlaylistsRepository {
 
   @override
   Future<List<Song>> getPlaylistSongs(String playlistId) async {
-    return [];
+    final pl = _playlists.firstWhere(
+      (p) => p.id == playlistId,
+      orElse: () => Playlist(
+        id: playlistId,
+        userId: '',
+        title: '',
+        songIds: [],
+        createdAt: DateTime.now(),
+      ),
+    );
+    return pl.songIds.map<Song>((id) => Song(
+      id: id,
+      bandId: 'fake-band',
+      title: 'Canción ${id.substring(0, id.length > 8 ? 8 : id.length)}',
+      genre: 'Rock',
+      durationSeconds: 180,
+      audioPath: 'https://example.com/audio.mp3',
+      audioSha256: 'fake-sha256-$id',
+      createdAt: DateTime.now(),
+    )).toList();
+  }
+
+  @override
+  Future<void> deletePlaylist(String playlistId) async {
+    _playlists.removeWhere((p) => p.id == playlistId);
   }
 }
 
@@ -155,5 +180,10 @@ class SupabasePlaylistsRepository implements PlaylistsRepository {
     } catch (e) {
       return [];
     }
+  }
+
+  @override
+  Future<void> deletePlaylist(String playlistId) async {
+    await _client.from('playlists').delete().eq('id', playlistId);
   }
 }

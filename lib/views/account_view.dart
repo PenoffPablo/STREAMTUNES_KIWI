@@ -152,52 +152,6 @@ class _AccountViewState extends State<AccountView> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-
-        // Acceso rápido de prueba para la Cátedra y Defensa Oral
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceLight,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'ACCESOS RÁPIDOS DE PRUEBA (DEFENSA ORAL):',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  ActionChip(
-                    label: const Text('Admin Colectivo'),
-                    onPressed: () {
-                      _emailController.text = 'admin@streamtunes.org';
-                      _passwordController.text = 'admin123';
-                    },
-                  ),
-                  ActionChip(
-                    label: const Text('Músico con Banda'),
-                    onPressed: () {
-                      _emailController.text = 'artist@losfuzzers.com';
-                      _passwordController.text = 'fuzz123';
-                    },
-                  ),
-                  ActionChip(
-                    label: const Text('Oyente / Fan'),
-                    onPressed: () {
-                      _emailController.text = 'fan@correo.com';
-                      _passwordController.text = 'fan123';
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
