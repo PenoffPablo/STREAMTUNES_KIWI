@@ -484,7 +484,7 @@ class _UploadViewState extends State<UploadView> {
                 ),
                 const SizedBox(height: 16),
 
-                // Opción de subida en segundo plano con Workmanager (Criterio E2)
+                // Opción de subida en segundo plano con Workmanager
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Subir en segundo plano (Workmanager Android)'),

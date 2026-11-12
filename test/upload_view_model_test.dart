@@ -8,7 +8,7 @@ import 'package:streamtunes/services/device_capabilities_service.dart';
 import 'package:streamtunes/view_models/upload_view_model.dart';
 
 void main() {
-  group('UploadViewModel - Validaciones de Negocio y Cupos (Criterios D1, D2, D3)', () {
+  group('UploadViewModel - Validaciones de Negocio y Cupos', () {
     late FakeSongsRepository songsRepo;
     late FakeConfigRepository configRepo;
     late DeviceCapabilitiesService deviceService;

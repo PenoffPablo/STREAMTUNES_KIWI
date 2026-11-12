@@ -107,7 +107,7 @@ class BackgroundUploadService {
     }
   }
 
-  /// Registra una tarea OneOff en Workmanager con restricción de red (Criterio E2)
+  /// Registra una tarea OneOff en Workmanager con restricción de red
   static Future<void> scheduleSongUpload({
     required String taskId,
     required String songTitle,

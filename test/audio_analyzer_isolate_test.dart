@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:streamtunes/services/audio_analyzer_service.dart';
 
 void main() {
-  group('AudioAnalyzerService - Isolate.run Heavy Analysis Test (Criterio D3)', () {
+  group('AudioAnalyzerService - Isolate.run Heavy Analysis Test', () {
     test('Verifica cabecera binaria ID3 de MP3, calcula SHA-256 y extrae 40 picos de onda en Isolate', () async {
       // Simular archivo MP3 con cabecera ID3 y bytes de audio variables
       final bytesList = <int>[

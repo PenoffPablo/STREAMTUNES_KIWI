@@ -87,7 +87,7 @@ class UploadViewModel extends ChangeNotifier {
     }
   }
 
-  /// Selecciona el archivo de audio y ejecuta el análisis pesado en Isolate.run (Criterio D3)
+  /// Selecciona el archivo de audio y ejecuta el análisis pesado en Isolate.run
   Future<void> pickAndAnalyzeAudio() async {
     _errorMessage = null;
     notifyListeners();
@@ -200,7 +200,7 @@ class UploadViewModel extends ChangeNotifier {
       final uploaded = await songsRepo.uploadSong(song);
       _songCount++;
 
-      // Soporte de Workmanager en segundo plano y notificación nativa (Criterios E1, E2)
+      // Soporte de Workmanager en segundo plano y notificación nativa
       if (runInBackground) {
         await BackgroundUploadService.scheduleSongUpload(
           taskId: 'upload-${uploaded.id}',

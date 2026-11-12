@@ -7,7 +7,7 @@ import 'package:streamtunes/services/pending_follow_service.dart';
 import 'package:streamtunes/view_models/home_view_model.dart';
 
 void main() {
-  group('QR Offline Queue & Sótano Sync Tests (Criterios F1, B1)', () {
+  group('QR Offline Queue & Sótano Sync Tests', () {
     late FakeAuthRepository authRepo;
     late FakeBandsRepository bandsRepo;
     late FakeSongsRepository songsRepo;

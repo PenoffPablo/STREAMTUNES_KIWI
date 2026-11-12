@@ -484,7 +484,7 @@ class SupabaseBandsRepository implements BandsRepository {
 
   @override
   Future<BandAggregatedStats> getBandAggregatedStats(String bandId) async {
-    // Invocación a RPC nativo de PostgreSQL (Corrección de la cátedra)
+    // Invocación a RPC nativo de PostgreSQL
     try {
       final res = await _client.rpc('band_aggregated_stats', params: {'p_band': bandId});
       return BandAggregatedStats.fromJson(res as Map<String, dynamic>);

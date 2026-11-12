@@ -19,7 +19,7 @@ import 'package:streamtunes/view_models/session_view_model.dart';
 import 'package:streamtunes/views/navigation_shell.dart';
 
 void main() {
-  group('Role Navigation & Moderation Tests (Criterios B1, C1, F1)', () {
+  group('Role Navigation & Moderation Tests', () {
     late FakeAuthRepository authRepo;
     late FakeBandsRepository bandsRepo;
     late FakeSongsRepository songsRepo;

@@ -86,6 +86,7 @@ void main() {
       expect(find.text('Grandes Éxitos'), findsWidgets);
       expect(find.text('En orden'), findsOneWidget);
       expect(find.text('Aleatorio'), findsOneWidget);
+      expect(find.text('Añadir más canciones'), findsOneWidget);
 
       // Verificar que los botones son clickeables
       await tester.tap(find.text('En orden'));
@@ -93,6 +94,11 @@ void main() {
 
       await tester.tap(find.text('Aleatorio'));
       await tester.pumpAndSettle();
+
+      // Abrir modal de añadir canciones
+      await tester.tap(find.text('Añadir más canciones'));
+      await tester.pumpAndSettle();
+      expect(find.text('Añadir temas a playlist'), findsOneWidget);
     });
   });
 }

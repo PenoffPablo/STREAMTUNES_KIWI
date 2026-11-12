@@ -21,7 +21,7 @@ import 'package:streamtunes/view_models/session_view_model.dart';
 import 'package:streamtunes/views/band_public_view.dart';
 
 void main() {
-  group('Band Public View & Realtime Donations (Criterios B1, B2, D2)', () {
+  group('Band Public View & Realtime Donations', () {
     late FakeBandsRepository bandsRepo;
     late FakeSongsRepository songsRepo;
     late FakeDonationsRepository donationsRepo;

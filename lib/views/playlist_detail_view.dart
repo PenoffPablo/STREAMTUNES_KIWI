@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:streamtunes/models/playlist.dart';
 import 'package:streamtunes/models/song.dart';
+import 'package:streamtunes/repositories/songs_repository.dart';
 import 'package:streamtunes/scopes/app_scopes.dart';
 import 'package:streamtunes/theme/app_theme.dart';
 import 'package:streamtunes/widgets/empty_state_view.dart';
@@ -84,6 +85,30 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
     );
   }
 
+  void _openAddSongsModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _AddSongsBottomSheet(
+        playlistId: widget.playlist.id,
+        playlistTitle: widget.playlist.title,
+        currentSongIds: (_songs ?? []).map((s) => s.id).toSet(),
+        onSongAdded: (Song song) {
+          setState(() {
+            _songs ??= [];
+            if (!_songs!.any((s) => s.id == song.id)) {
+              _songs!.add(song);
+            }
+          });
+        },
+      ),
+    );
+  }
+
   Future<void> _removeSong(Song song) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -163,6 +188,11 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
       appBar: AppBar(
         title: Text(widget.playlist.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.playlist_add, color: AppTheme.primary),
+            tooltip: 'Añadir canciones',
+            onPressed: _openAddSongsModal,
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (val) {
@@ -267,6 +297,25 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+
+                  // Botón "+ Añadir canciones a la playlist"
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _openAddSongsModal,
+                      icon: const Icon(Icons.add, size: 20, color: AppTheme.primary),
+                      label: const Text(
+                        'Añadir más canciones',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.surfaceLight,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -285,9 +334,13 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                     color: AppTheme.textSecondary,
                   ),
                 ),
-                Text(
-                  '$songCount temas',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                TextButton.icon(
+                  onPressed: _openAddSongsModal,
+                  icon: const Icon(Icons.add, size: 16, color: AppTheme.primary),
+                  label: const Text(
+                    'Añadir',
+                    style: TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -317,9 +370,9 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
               EmptyStateView(
                 icon: Icons.music_off,
                 title: 'Tu playlist no tiene canciones aún',
-                description: 'Explora temas en la pantalla de inicio o perfiles de bandas y presiona el ícono "+" para sumarlos aquí.',
-                actionLabel: 'Actualizar lista',
-                onAction: () => _loadSongs(forceRefresh: true),
+                description: 'Toca el botón a continuación para explorar temas y sumarlos a tu playlist.',
+                actionLabel: 'Añadir canciones',
+                onAction: _openAddSongsModal,
               )
             else
               ..._songs!.asMap().entries.map((entry) {
@@ -463,3 +516,301 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
   }
 }
 
+/// Modal inferior para buscar y sumar canciones a la playlist
+class _AddSongsBottomSheet extends StatefulWidget {
+  final String playlistId;
+  final String playlistTitle;
+  final Set<String> currentSongIds;
+  final void Function(Song song) onSongAdded;
+
+  const _AddSongsBottomSheet({
+    required this.playlistId,
+    required this.playlistTitle,
+    required this.currentSongIds,
+    required this.onSongAdded,
+  });
+
+  @override
+  State<_AddSongsBottomSheet> createState() => _AddSongsBottomSheetState();
+}
+
+class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Song> _allSongs = [];
+  List<Song> _filteredSongs = [];
+  late Set<String> _addedSongIds;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _addedSongIds = Set<String>.from(widget.currentSongIds);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAvailableSongs();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAvailableSongs() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      SongsRepository? repo;
+      try {
+        repo = RepositoriesScope.of(context).songsRepository;
+      } catch (_) {}
+
+      if (repo != null) {
+        final songs = await repo.getLatestSongs(limit: 50);
+        if (mounted) {
+          setState(() {
+            _allSongs = songs;
+            _filteredSongs = songs;
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _allSongs = [];
+            _filteredSongs = [];
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Error cargando temas disponibles: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _onSearchChanged(String query) {
+    final q = query.trim().toLowerCase();
+    setState(() {
+      if (q.isEmpty) {
+        _filteredSongs = _allSongs;
+      } else {
+        _filteredSongs = _allSongs.where((s) {
+          final titleMatch = s.title.toLowerCase().contains(q);
+          final bandMatch = (s.bandName ?? '').toLowerCase().contains(q);
+          final genreMatch = s.genre.toLowerCase().contains(q);
+          return titleMatch || bandMatch || genreMatch;
+        }).toList();
+      }
+    });
+  }
+
+  Future<void> _addSong(Song song) async {
+    final libraryVM = LibraryScope.of(context);
+    final ok = await libraryVM.addSongToPlaylist(widget.playlistId, song.id);
+    if (ok && mounted) {
+      setState(() {
+        _addedSongIds.add(song.id);
+      });
+      widget.onSongAdded(song);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"${song.title}" sumada a "${widget.playlistTitle}"')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      padding: const EdgeInsets.only(top: 12, left: 16, right: 16, bottom: 16),
+      child: Column(
+        children: [
+          // Tirador superior del modal
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade600,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          // Título y botón cerrar
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Añadir temas a playlist',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Sumar canciones a "${widget.playlistTitle}"',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Buscador de canciones
+          TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'Buscar por título, banda o género...',
+              prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: AppTheme.surfaceLight,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Lista de canciones para sumar
+          Expanded(
+            child: _buildSongList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSongList() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent)),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _loadAvailableSongs,
+              child: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_filteredSongs.isEmpty) {
+      return const Center(
+        child: Text(
+          'No se encontraron canciones disponibles.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: _filteredSongs.length,
+      separatorBuilder: (_, __) => const Divider(color: AppTheme.surfaceLight, height: 1),
+      itemBuilder: (context, idx) {
+        final song = _filteredSongs[idx];
+        final isAdded = _addedSongIds.contains(song.id);
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              width: 44,
+              height: 44,
+              color: AppTheme.surfaceLight,
+              child: song.coverUrl != null
+                  ? Image.network(
+                      song.coverUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: AppTheme.textSecondary),
+                    )
+                  : const Icon(Icons.music_note, color: AppTheme.textSecondary),
+            ),
+          ),
+          title: Text(
+            song.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          subtitle: Text(
+            '${song.bandName ?? "Banda"} • ${song.formattedDuration}',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+          trailing: isAdded
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check, color: AppTheme.primary, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        'Añadida',
+                        style: TextStyle(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => _addSong(song),
+                  icon: const Icon(Icons.add, size: 16, color: AppTheme.primary),
+                  label: const Text('Sumar', style: TextStyle(color: AppTheme.primary, fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.primary),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}

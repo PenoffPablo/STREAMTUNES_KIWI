@@ -63,7 +63,7 @@ class AudioPlayerService {
 
   Future<void> _init() async {
     try {
-      // Configuración nativa de foco de audio (Criterio E3)
+      // Configuración nativa de foco de audio
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
 
@@ -167,7 +167,7 @@ class AudioPlayerService {
         _currentIndex = 0;
       }
 
-      // Soporte de segundo plano con MediaItem para notificación multimedia (Criterio E3)
+      // Soporte de segundo plano con MediaItem para notificación multimedia
       final audioSource = AudioSource.uri(
         Uri.parse(song.audioPath),
         tag: MediaItem(

@@ -95,7 +95,7 @@ class _BandPublicViewState extends State<BandPublicView> {
                     )
                   : LayoutBuilder(
                       builder: (context, constraints) {
-                        // Criterio B1 / B3: Disposición adaptativa (2 columnas en pantallas >= 800px)
+                        // Disposición adaptativa (2 columnas en pantallas >= 800px)
                         final isDesktop = constraints.maxWidth >= 800;
 
                         return Stack(
