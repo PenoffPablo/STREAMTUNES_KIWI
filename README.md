@@ -265,10 +265,14 @@ La migración `20261116020000_rls_hardening.sql` cierra las políticas abiertas 
 
 ### Secretos de Mercado Pago
 ```bash
-supabase functions deploy mercadopago-create-preference
+supabase functions deploy mercadopago-create-preference --no-verify-jwt
 supabase functions deploy mercadopago-webhook --no-verify-jwt
 supabase secrets set MP_ACCESS_TOKEN=APP_USR-...
 ```
+
+Las dos funciones van con `--no-verify-jwt`:
+* **`mercadopago-webhook`** la llama Mercado Pago, que no tiene sesión de Supabase.
+* **`mercadopago-create-preference`** la llaman también fans sin cuenta, y las claves `sb_publishable_` no son JWT. La función identifica al donante por su cuenta, a partir del token de sesión si existe.
 
 ### Ejecucion en Desarrollo
 Para iniciar la aplicación en un emulador o dispositivo físico conectado:
