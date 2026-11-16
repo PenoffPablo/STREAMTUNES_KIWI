@@ -10,6 +10,7 @@
 --   * 20261116000000_device_tokens.sql        (push con Firebase)
 --   * 20261116010000_donations_integrity.sql  (total por estado + RLS de donaciones)
 --   * 20261116020000_rls_hardening.sql        (cierra políticas abiertas de tablas y Storage)
+--   * 20261116030000_function_hardening.sql   (permisos de funciones, top fans y métricas)
 --
 -- No incluye objetos administrados por Supabase (esquemas auth/storage,
 -- event trigger `rls_auto_enable`) ni la tabla `usuarios`, que existe en la

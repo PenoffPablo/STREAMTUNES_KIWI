@@ -263,6 +263,11 @@ La migración `20261116010000_donations_integrity.sql` hace dos cosas: el total 
 
 La migración `20261116020000_rls_hardening.sql` cierra las políticas abiertas (`using (true)`) de `songs`, `playlists`, `playlist_songs`, `band_photos`, `band_follows` y Storage. Cada operación queda limitada a quien corresponde: miembros de la banda, dueño de la playlist, el propio usuario o moderadores.
 
+La migración `20261116030000_function_hardening.sql` hace tres cosas:
+* Quita el permiso de ejecución por API a las funciones de trigger y de mantenimiento.
+* Limita `band_aggregated_stats` a los miembros de la banda.
+* Corrige `band_top_fans` para que liste solo oyentes reales y no exponga el id de los perfiles privados.
+
 ### Secretos de Mercado Pago
 ```bash
 supabase functions deploy mercadopago-create-preference --no-verify-jwt
