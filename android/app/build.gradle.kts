@@ -4,6 +4,16 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firebase (push): google-services.json NO se sube al repo (.gitignore).
+// El plugin se aplica solo si el archivo existe, así el proyecto compila
+// igual al clonarlo; sin el archivo, la app funciona con el push desactivado.
+// Para habilitarlo: `flutterfire configure --project=<id> --platforms=android`.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.warn("google-services.json no encontrado: push (FCM) desactivado en este build.")
+}
+
 android {
     namespace = "com.streamtunes.app.streamtunes"
     compileSdk = flutter.compileSdkVersion
