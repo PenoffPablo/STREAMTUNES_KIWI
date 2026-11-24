@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:streamtunes/data/repositories/songs/songs_repository.dart';
 import 'package:streamtunes/domain/models/playlist.dart';
 import 'package:streamtunes/domain/models/song.dart';
@@ -12,11 +13,7 @@ import 'package:streamtunes/utils/async_utils.dart';
 /// búsqueda) vivía en el `State` del widget y la hoja de añadir canciones leía
 /// `SongsRepository` directamente desde la View.
 class PlaylistDetailViewModel extends ViewModel {
-  PlaylistDetailViewModel({
-    required this.playlist,
-    required this.library,
-    required this.songsRepo,
-  });
+  PlaylistDetailViewModel({required this.playlist, required this.library, required this.songsRepo});
 
   final Playlist playlist;
 
@@ -49,11 +46,13 @@ class PlaylistDetailViewModel extends ViewModel {
   List<Song> get filteredAvailableSongs {
     final q = _availableQuery.trim().toLowerCase();
     if (q.isEmpty) return List.unmodifiable(_availableSongs);
-    return _availableSongs.where((s) {
-      return s.title.toLowerCase().contains(q) ||
-          (s.bandName ?? '').toLowerCase().contains(q) ||
-          s.genre.toLowerCase().contains(q);
-    }).toList(growable: false);
+    return _availableSongs
+        .where((s) {
+          return s.title.toLowerCase().contains(q) ||
+              (s.bandName ?? '').toLowerCase().contains(q) ||
+              s.genre.toLowerCase().contains(q);
+        })
+        .toList(growable: false);
   }
 
   Future<void> loadSongs({bool forceRefresh = false}) async {
@@ -63,7 +62,7 @@ class PlaylistDetailViewModel extends ViewModel {
     try {
       _songs = List.of(await library.getSongsForPlaylist(playlist.id, forceRefresh: forceRefresh));
     } catch (e) {
-      _errorMessage = 'Error cargando temas de la playlist: ${describeError(e)}';
+      _errorMessage = describeError(e);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -102,7 +101,7 @@ class PlaylistDetailViewModel extends ViewModel {
     try {
       _availableSongs = await songsRepo.getLatestSongs(limit: 50);
     } catch (e) {
-      _availableError = 'Error cargando temas disponibles: ${describeError(e)}';
+      _availableError = describeError(e);
     } finally {
       _isLoadingAvailable = false;
       notifyListeners();

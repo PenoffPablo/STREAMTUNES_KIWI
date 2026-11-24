@@ -14,7 +14,6 @@ import 'package:streamtunes/data/services/device/external_launcher_service.dart'
 import 'package:streamtunes/data/services/reports/band_report_service.dart';
 import 'package:streamtunes/data/services/storage/pending_follow_service.dart';
 import 'package:streamtunes/domain/models/band.dart';
-import 'package:streamtunes/domain/models/donation.dart';
 import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/band_public/view_models/donation_view_model.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
@@ -57,10 +56,7 @@ class _FakeCheckout implements PaymentsRepository {
   Future<String?> createDonationCheckout({
     required String donationId,
     required String bandId,
-    required String bandName,
     required double amount,
-    String? donorUserId,
-    String? donorName,
     String? message,
     bool isAnonymous = false,
   }) async {
@@ -327,6 +323,23 @@ void main() {
       vm.dispose();
     });
 
+    test('cada intento de pago tiene su propio id (dos pagos = dos aportes)', () async {
+      final checkout = _FakeCheckout();
+      final vm = DonationViewModel(
+        band: band,
+        currentUser: null,
+        paymentsRepo: checkout,
+        launcher: _FakeLauncher(),
+      );
+      await vm.startCheckout();
+      await vm.startCheckout();
+      final ids = checkout.requests.map((r) => r.donationId).toList();
+      expect(ids, hasLength(2));
+      expect(ids.first, isNot(ids.last));
+      expect(vm.donationId, ids.last);
+      vm.dispose();
+    });
+
     test('sin pasarela disponible informa el error (no hay caminos alternativos)', () async {
       final launcher = _FakeLauncher();
       final vm = DonationViewModel(
@@ -375,19 +388,4 @@ void main() {
     });
   });
 
-  test('Donation.toJson usa las columnas reales de public.donations', () {
-    final json = Donation(
-      id: 'abc',
-      bandId: 'b1',
-      donorUserId: null,
-      donorName: 'Fan',
-      amountArs: 1500,
-      isAnonymous: true,
-      createdAt: DateTime(2026),
-    ).toJson();
-    expect(json.keys, containsAll(['id', 'band_id', 'donor_id', 'amount', 'currency', 'is_public', 'status']));
-    expect(json.keys, isNot(contains('amount_ars')));
-    expect(json.keys, isNot(contains('donor_name')));
-    expect(json['is_public'], isFalse);
-  });
 }

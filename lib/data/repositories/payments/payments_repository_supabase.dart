@@ -11,10 +11,7 @@ class SupabasePaymentsRepository implements PaymentsRepository {
   Future<String?> createDonationCheckout({
     required String donationId,
     required String bandId,
-    required String bandName,
     required double amount,
-    String? donorUserId,
-    String? donorName,
     String? message,
     bool isAnonymous = false,
   }) async {
@@ -23,10 +20,7 @@ class SupabasePaymentsRepository implements PaymentsRepository {
       body: {
         'donation_id': donationId,
         'band_id': bandId,
-        'band_name': bandName,
         'amount': amount,
-        'donor_user_id': donorUserId,
-        'donor_name': donorName,
         'message': message,
         'is_anonymous': isAnonymous,
       },

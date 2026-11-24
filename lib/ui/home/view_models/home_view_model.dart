@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:streamtunes/domain/models/app_user.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/domain/models/song.dart';
@@ -18,12 +19,7 @@ class QrScanResult {
   final bool isOffline;
   final bool isSuccess;
 
-  const QrScanResult({
-    this.band,
-    required this.message,
-    required this.isOffline,
-    required this.isSuccess,
-  });
+  const QrScanResult({this.band, required this.message, required this.isOffline, required this.isSuccess});
 }
 
 class HomeViewModel extends ViewModel {
@@ -81,11 +77,9 @@ class HomeViewModel extends ViewModel {
   /// Arranca el pipeline de búsqueda y la primera carga. Lo llama la View en `initState`.
   Future<void> init() {
     // Pipeline reactivo: texto -> trim -> distinct -> debounce -> cargar feed.
-    _querySub ??= _queryController.stream
-        .map((q) => q.trim())
-        .distinct()
-        .transform(debounce(searchDebounce))
-        .listen((query) {
+    _querySub ??= _queryController.stream.map((q) => q.trim()).distinct().transform(debounce(searchDebounce)).listen((
+      query,
+    ) {
       if (query == _searchQuery) return; // ya aplicada (por ej. por clearSearch)
       _searchQuery = query;
       loadFeed();
@@ -115,7 +109,7 @@ class HomeViewModel extends ViewModel {
       _approvedBands = bands;
     } catch (e) {
       if (requestId != _requestId) return;
-      _errorMessage = 'Error cargando música: ${describeError(e)}';
+      _errorMessage = describeError(e);
     } finally {
       if (requestId == _requestId) {
         _isLoading = false;
@@ -163,11 +157,7 @@ class HomeViewModel extends ViewModel {
   Future<QrScanResult> handleQrScan(String rawData, {bool simulateOffline = false}) async {
     final cleaned = rawData.trim();
     if (cleaned.isEmpty) {
-      return const QrScanResult(
-        message: 'Código QR inválido o vacío.',
-        isOffline: false,
-        isSuccess: false,
-      );
+      return const QrScanResult(message: 'Código QR inválido o vacío.', isOffline: false, isSuccess: false);
     }
 
     // Extraer slug o ID de la banda (admite streamtunes://band/slug o https://... o ID plano)

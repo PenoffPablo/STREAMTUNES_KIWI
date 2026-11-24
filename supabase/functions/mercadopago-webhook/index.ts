@@ -1,20 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 
-// Webhook de Mercado Pago: registra en `donations` los pagos APROBADOS.
+// Webhook de Mercado Pago. KIWI cobra todos los aportes en su cuenta, y esta
+// función es la ÚNICA que escribe en `donations` (service role).
 //
-// Es IDEMPOTENTE: el id de la fila es el `donation_id` que generó la app.
-//   * Mercado Pago reintenta notificaciones -> la misma fila, no duplicados.
-//   * Si el fan además tocó "Ya transferí" -> la misma fila, no duplicados.
-// El total de la banda (bands.donations_collected) lo actualiza el trigger
-// `donations_accumulate` de la base: acá NO se suma a mano (antes se sumaba
-// dos veces: una el trigger y otra esta función).
+// * Pago APROBADO  -> se registra la donación.
+// * Pago DEVUELTO / CONTRACARGO / CANCELADO (que ya estaba aprobado)
+//                  -> la donación pasa a `refunded`: deja de contar para el
+//                     total de la banda y para lo que KIWI le debe.
+//
+// Idempotencia: la clave es el id del PAGO verificado contra la API de MP
+// (`mp_payment_id`), que nadie puede inventar. Un pago = una fila; los
+// reintentos de Mercado Pago se ignoran. (Antes se usaba un id que mandaba la
+// app, y un pago podía pisar a otro.)
+//
+// El total de la banda (bands.donations_collected) lo mantiene el trigger
+// `donations_accumulate`: suma al aprobarse y resta al pasar a refunded.
 const MP_ACCESS_TOKEN = Deno.env.get("MP_ACCESS_TOKEN") ?? "";
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Estados de MP que anulan un pago que ya había sido aprobado. */
+const REVERSED = new Set(["refunded", "charged_back", "cancelled"]);
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -46,24 +55,37 @@ serve(async (req) => {
     });
     if (!mpRes.ok) return json({ error: "Failed to fetch payment from MP" });
     const payment = await mpRes.json();
+    const mpPaymentId = String(payment.id ?? paymentId);
+
+    // 2. Devoluciones: si el pago estaba aprobado, se anula la donación.
+    if (REVERSED.has(payment.status)) {
+      const { data, error } = await supabase
+        .from("donations")
+        .update({ status: "refunded" })
+        .eq("mp_payment_id", mpPaymentId)
+        .eq("status", "approved")
+        .select("id");
+      if (error) throw error;
+      return json({ status: "reversed", payment_id: mpPaymentId, updated: data?.length ?? 0 });
+    }
     if (payment.status !== "approved") return json({ payment_status: payment.status });
 
-    // 2. Datos de la donación: `metadata` (preferencias nuevas). Para pagos de
-    //    preferencias viejas se intenta leer el JSON del external_reference.
+    // 3. Datos del aporte: `metadata` (la arma create-preference en el servidor).
+    //    Para pagos de preferencias viejas se intenta el JSON del external_reference.
     let meta: Record<string, unknown> = payment.metadata ?? {};
     if (!meta.band_id && payment.external_reference) {
       try {
         meta = JSON.parse(payment.external_reference);
       } catch (_) {
-        // external_reference nuevo: es solo el donation_id
+        // external_reference nuevo: no es JSON
       }
     }
     const bandId = String(meta.band_id ?? "");
     if (!bandId) return json({ error: "Pago sin band_id en metadata" });
 
-    const candidateId = String(meta.donation_id ?? payment.external_reference ?? "");
+    // Sin `id`: lo genera la base. Así ningún dato que venga de afuera puede
+    // apuntar a una fila existente.
     const row = {
-      ...(UUID_RE.test(candidateId) ? { id: candidateId } : {}),
       band_id: bandId,
       donor_id: (meta.donor_id as string | null) ?? null,
       amount: Number(payment.transaction_amount),
@@ -71,32 +93,29 @@ serve(async (req) => {
       // de MP). Es la base de lo que después se le liquida a la banda.
       net_amount: Number(payment.transaction_details?.net_received_amount ?? payment.transaction_amount),
       // Prueba de que el pago fue verificado contra la API de Mercado Pago.
-      mp_payment_id: String(payment.id ?? paymentId),
+      mp_payment_id: mpPaymentId,
       currency: "ARS",
       message: (meta.message as string | null) ?? null,
       is_public: meta.is_anonymous !== true,
       status: "approved",
     };
 
-    // 3. Upsert por id con los datos REALES del pago:
-    //    * el id es el que generó la app, así un mismo pago es siempre la misma fila;
-    //    * si Mercado Pago reintenta, la fila ya está aprobada y el trigger no
-    //      vuelve a sumar (solo suma al pasar a approved).
+    // 4. INSERT ... ON CONFLICT (mp_payment_id) DO NOTHING: idempotente.
     const { error } = await supabase
       .from("donations")
-      .upsert(row, { onConflict: "id" });
+      .upsert(row, { onConflict: "mp_payment_id", ignoreDuplicates: true });
     if (error) {
       // Rechazo de negocio de la base (banda no aprobada, monto > tope):
       // reintentar no lo arregla. Se registra y se responde 200 para que
       // Mercado Pago no reintente en loop.
       if (error.code === "P0001") {
-        console.error("Pago aprobado que la base rechazó", paymentId, error.message);
-        return json({ status: "rejected", payment_id: paymentId, reason: error.message });
+        console.error("Pago aprobado que la base rechazó", mpPaymentId, error.message);
+        return json({ status: "rejected", payment_id: mpPaymentId, reason: error.message });
       }
       throw error;
     }
 
-    return json({ status: "success", payment_id: paymentId, donation_id: row.id ?? null });
+    return json({ status: "success", payment_id: mpPaymentId });
   } catch (err) {
     console.error(err);
     // 500 para que Mercado Pago reintente más tarde.

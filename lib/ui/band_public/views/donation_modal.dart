@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:streamtunes/ui/core/widgets/error_banner.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/ui/band_public/view_models/donation_view_model.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
@@ -59,33 +60,20 @@ class _DonationModalState extends State<DonationModal> {
     if (!mounted) return;
     final error = _vm.errorMessage;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppTheme.accentOrange,
-          content: Text(error, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        ),
-      );
+      showErrorSnackBar(context, title: 'No se pudo iniciar el pago', message: error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _vm,
-      builder: (context, _) => _buildContent(context),
-    );
+    return ListenableBuilder(listenable: _vm, builder: (context, _) => _buildContent(context));
   }
 
   Widget _buildContent(BuildContext context) {
     final vm = _vm;
 
     return Container(
-      padding: EdgeInsets.only(
-        top: 20,
-        left: 20,
-        right: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
+      padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -105,10 +93,7 @@ class _DonationModalState extends State<DonationModal> {
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
               ],
             ),
             const Text(
@@ -127,10 +112,7 @@ class _DonationModalState extends State<DonationModal> {
                   selected: isSelected,
                   selectedColor: AppTheme.primary,
                   backgroundColor: AppTheme.surfaceLight,
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.black : Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  labelStyle: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
                   onSelected: (_) {
                     _amountController.text = preset.toInt().toString();
                     vm.setAmountText(_amountController.text);
@@ -148,9 +130,7 @@ class _DonationModalState extends State<DonationModal> {
                 labelText: 'Monto a aportar en pesos (ARS)',
                 prefixText: '\$ ',
                 helperText: 'Aporte libre de hasta \$${vm.maxAmount.toInt()} ARS.',
-                errorText: vm.exceedsMax
-                    ? 'El máximo por aporte es \$${vm.maxAmount.toInt()} ARS.'
-                    : null,
+                errorText: vm.exceedsMax ? 'El máximo por aporte es \$${vm.maxAmount.toInt()} ARS.' : null,
               ),
               onChanged: vm.setAmountText,
             ),
@@ -185,10 +165,7 @@ class _DonationModalState extends State<DonationModal> {
             // Desglose transparente
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(10)),
               child: Column(
                 children: [
                   _row('Total a aportar:', '\$${vm.amount.toStringAsFixed(2)} ARS', bold: true),
@@ -275,7 +252,10 @@ class _DonationModalState extends State<DonationModal> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Flexible(
-          child: Text(label, style: TextStyle(fontSize: size, color: color, fontWeight: highlight ? FontWeight.bold : null)),
+          child: Text(
+            label,
+            style: TextStyle(fontSize: size, color: color, fontWeight: highlight ? FontWeight.bold : null),
+          ),
         ),
         Text(
           value,

@@ -5,15 +5,14 @@
 abstract class PaymentsRepository {
   /// Devuelve el `init_point` (URL de checkout) o `null` si no se pudo crear.
   ///
-  /// [donationId] identifica el intento de donación: el webhook lo usa como
-  /// `id` de la fila, así un mismo pago nunca se registra dos veces.
+  /// [donationId] identifica el intento (viaja como `external_reference`,
+  /// solo para trazabilidad). El donante, el nombre de la banda y el tope NO
+  /// se mandan: la Edge Function los toma del JWT y de la base, así no se
+  /// pueden falsificar desde la app.
   Future<String?> createDonationCheckout({
     required String donationId,
     required String bandId,
-    required String bandName,
     required double amount,
-    String? donorUserId,
-    String? donorName,
     String? message,
     bool isAnonymous = false,
   });

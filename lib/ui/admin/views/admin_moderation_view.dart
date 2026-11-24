@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:streamtunes/ui/core/widgets/error_banner.dart';
+import 'package:streamtunes/utils/async_utils.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dart';
@@ -19,8 +21,7 @@ class _AdminModerationViewState extends State<AdminModerationView> {
   @override
   void initState() {
     super.initState();
-    _viewModel = DependenciesScope.of(context).createAdminModerationViewModel()
-      ..init();
+    _viewModel = DependenciesScope.of(context).createAdminModerationViewModel()..init();
   }
 
   @override
@@ -45,7 +46,8 @@ class _AdminModerationViewState extends State<AdminModerationView> {
             body: const EmptyStateView(
               icon: Icons.shield_outlined,
               title: 'Acceso Denegado',
-              description: 'Esta sección es exclusiva para los moderadores y administradores del Colectivo StreamTunes.',
+              description:
+                  'Esta sección es exclusiva para los moderadores y administradores del Colectivo StreamTunes.',
             ),
           );
         }
@@ -59,30 +61,25 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                 Text('Panel de Moderación del Colectivo'),
               ],
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => vm.loadModerationData(),
-              ),
-            ],
+            actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => vm.loadModerationData())],
           ),
           body: vm.isLoading
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
               : ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   children: [
+                    if (vm.errorMessage != null) ...[
+                      ErrorBanner(message: vm.errorMessage!, onRetry: vm.loadModerationData),
+                      const SizedBox(height: 12),
+                    ],
                     // 1. Interruptor de Emergencia: Spend Cap
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: vm.config.spendCapActive
-                            ? AppTheme.accentOrange.withAlpha(50)
-                            : AppTheme.surface,
+                        color: vm.config.spendCapActive ? AppTheme.accentOrange.withAlpha(50) : AppTheme.surface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: vm.config.spendCapActive
-                              ? AppTheme.accentOrange
-                              : AppTheme.surfaceLight,
+                          color: vm.config.spendCapActive ? AppTheme.accentOrange : AppTheme.surfaceLight,
                         ),
                       ),
                       child: Column(
@@ -92,9 +89,7 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                             children: [
                               Icon(
                                 Icons.flash_on,
-                                color: vm.config.spendCapActive
-                                    ? AppTheme.accentOrange
-                                    : AppTheme.textSecondary,
+                                color: vm.config.spendCapActive ? AppTheme.accentOrange : AppTheme.textSecondary,
                               ),
                               const SizedBox(width: 8),
                               const Text(
@@ -117,9 +112,7 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                                   : 'Freno inactivo (Operación normal)',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: vm.config.spendCapActive
-                                    ? AppTheme.accentOrange
-                                    : AppTheme.textPrimary,
+                                color: vm.config.spendCapActive ? AppTheme.accentOrange : AppTheme.textPrimary,
                               ),
                             ),
                             value: vm.config.spendCapActive,
@@ -144,7 +137,12 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                       children: [
                         const Text(
                           'BANDAS PENDIENTES DE REVISIÓN',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.textSecondary),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
                         Text(
                           '${vm.pendingBands.length}',
@@ -166,66 +164,81 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                         ),
                       )
                     else
-                      ...vm.pendingBands.map((band) => Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Container(
-                                          width: 50,
-                                          height: 50,
-                                          color: AppTheme.surfaceLight,
-                                          child: band.coverUrl != null
-                                              ? Image.network(
-                                                  band.coverUrl!,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.groups),
-                                                )
-                                              : const Icon(Icons.groups),
-                                        ),
+                      ...vm.pendingBands.map(
+                        (band) => Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Container(
+                                        width: 50,
+                                        height: 50,
+                                        color: AppTheme.surfaceLight,
+                                        child: band.coverUrl != null
+                                            ? Image.network(
+                                                band.coverUrl!,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) => const Icon(Icons.groups),
+                                              )
+                                            : const Icon(Icons.groups),
                                       ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(band.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                            Text('${band.genre} • ${band.location ?? "Sin ubicación"}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                                            Text('Slug: /band/${band.slug}', style: const TextStyle(fontSize: 11, color: AppTheme.primary, fontFamily: 'monospace')),
-                                          ],
-                                        ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            band.name,
+                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          ),
+                                          Text(
+                                            '${band.genre} • ${band.location ?? "Sin ubicación"}',
+                                            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                          ),
+                                          Text(
+                                            'Slug: /band/${band.slug}',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppTheme.primary,
+                                              fontFamily: 'monospace',
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  if (band.bio != null) ...[
-                                    const SizedBox(height: 8),
-                                    Text(band.bio!, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                    ),
                                   ],
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () => vm.rejectBand(band.id),
-                                        child: const Text('Rechazar', style: TextStyle(color: AppTheme.errorRed)),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      ElevatedButton(
-                                        onPressed: () => vm.approveBand(band.id),
-                                        child: const Text('Aprobar Banda'),
-                                      ),
-                                    ],
-                                  ),
+                                ),
+                                if (band.bio != null) ...[
+                                  const SizedBox(height: 8),
+                                  Text(band.bio!, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                                 ],
-                              ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () => vm.rejectBand(band.id),
+                                      child: const Text('Rechazar', style: TextStyle(color: AppTheme.errorRed)),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton(
+                                      onPressed: () => vm.approveBand(band.id),
+                                      child: const Text('Aprobar Banda'),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          )),
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 20),
 
                     // 3. Reportes Comunitarios de Canciones
@@ -234,7 +247,12 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                       children: [
                         const Text(
                           'REPORTES COMUNITARIOS ABIERTOS',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.textSecondary),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
                         Text(
                           '${vm.openReports.length}',
@@ -256,60 +274,68 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                         ),
                       )
                     else
-                      ...vm.openReports.map((report) => Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.report_problem, color: AppTheme.accentOrange, size: 20),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Canción: "${report.songTitle ?? report.songId}"',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                        ),
+                      ...vm.openReports.map(
+                        (report) => Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.report_problem, color: AppTheme.accentOrange, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Canción: "${report.songTitle ?? report.songId}"',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                       ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  if (report.bandName != null)
-                                    Text('Banda: ${report.bandName}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.surfaceLight,
-                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Text(
-                                      'Motivo: "${report.reason}"',
-                                      style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                if (report.bandName != null)
+                                  Text(
+                                    'Banda: ${report.bandName}',
+                                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                  ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.surfaceLight,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'Motivo: "${report.reason}"',
+                                    style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () => vm.dismissReport(report.id),
+                                      child: const Text('Desestimar'),
                                     ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () => vm.dismissReport(report.id),
-                                        child: const Text('Desestimar'),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton(
+                                      onPressed: () => vm.resolveReport(report.id, hideSong: true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.errorRed,
+                                        foregroundColor: Colors.white,
                                       ),
-                                      const SizedBox(width: 8),
-                                      ElevatedButton(
-                                        onPressed: () => vm.resolveReport(report.id, hideSong: true),
-                                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed, foregroundColor: Colors.white),
-                                        child: const Text('Ocultar Canción'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                      child: const Text('Ocultar Canción'),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          )),
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 80),
                   ],
                 ),
@@ -328,22 +354,26 @@ class _AdminModerationViewState extends State<AdminModerationView> {
       note: data.note,
     );
     if (!mounted) return;
+    if (!ok) {
+      showErrorSnackBar(
+        context,
+        title: 'No se registró el pago a ${balance.bandName}',
+        message: _viewModel.payoutError ?? kUnexpectedErrorMessage,
+      );
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: ok ? AppTheme.primary : AppTheme.errorRed,
+        backgroundColor: AppTheme.primary,
         content: Text(
-          ok
-              ? 'Pago de \$${data.amount.toStringAsFixed(2)} a ${balance.bandName} registrado. La banda recibe un aviso.'
-              : (_viewModel.errorMessage ?? 'No se pudo registrar el pago.'),
-          style: TextStyle(color: ok ? Colors.black : Colors.white),
+          'Pago de \$${data.amount.toStringAsFixed(2)} a ${balance.bandName} registrado. La banda recibe un aviso.',
+          style: const TextStyle(color: Colors.black),
         ),
       ),
     );
   }
 
-
-  static String _money(double v) =>
-      v == v.roundToDouble() ? '\$${v.toStringAsFixed(0)}' : '\$${v.toStringAsFixed(2)}';
+  static String _money(double v) => v == v.roundToDouble() ? '\$${v.toStringAsFixed(0)}' : '\$${v.toStringAsFixed(2)}';
 
   static String _dateTime(DateTime d) {
     final l = d.toLocal();
@@ -358,23 +388,31 @@ class _AdminModerationViewState extends State<AdminModerationView> {
     final bandsWithMovement = vm.balances.where((b) => b.collected > 0 || b.paid > 0).toList();
 
     Widget total(String label, double value, {Color? color}) => Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-              const SizedBox(height: 2),
-              Text(_money(value), style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
-            ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          const SizedBox(height: 2),
+          Text(
+            _money(value),
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color),
           ),
-        );
+        ],
+      ),
+    );
 
     Widget sectionTitle(String text) => Padding(
-          padding: const EdgeInsets.only(top: 14, bottom: 4),
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.textSecondary),
-          ),
-        );
+      padding: const EdgeInsets.only(top: 14, bottom: 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.1,
+          color: AppTheme.textSecondary,
+        ),
+      ),
+    );
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -396,17 +434,13 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                 ),
               ),
-              IconButton(
-                tooltip: 'Actualizar',
-                icon: const Icon(Icons.refresh, size: 20),
-                onPressed: vm.refreshMoney,
-              ),
+              IconButton(tooltip: 'Actualizar', icon: const Icon(Icons.refresh, size: 20), onPressed: vm.refreshMoney),
             ],
           ),
 
           if (vm.moneyError != null) ...[
-            Text(vm.moneyError!, style: const TextStyle(color: AppTheme.accentOrange, fontSize: 12)),
-            const SizedBox(height: 6),
+            ErrorBanner(warning: true, message: vm.moneyError!, onRetry: vm.refreshMoney),
+            const SizedBox(height: 8),
           ],
 
           // Resumen general
@@ -453,11 +487,8 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
                       )
                     : b.hasPending
-                        ? ElevatedButton(
-                            onPressed: () => _pay(b),
-                            child: Text('Pagar ${_money(b.pending)}'),
-                          )
-                        : const Icon(Icons.check_circle, color: AppTheme.primary),
+                    ? ElevatedButton(onPressed: () => _pay(b), child: Text('Pagar ${_money(b.pending)}'))
+                    : const Icon(Icons.check_circle, color: AppTheme.primary),
               ),
 
           // Pagos recibidos

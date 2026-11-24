@@ -16,10 +16,7 @@ class LibraryViewModel extends ViewModel {
   bool _isLoading = false;
   String? _errorMessage;
 
-  LibraryViewModel({
-    required this.playlistsRepo,
-    required this.bandsRepo,
-  });
+  LibraryViewModel({required this.playlistsRepo, required this.bandsRepo});
 
   List<Playlist> get playlists => List.unmodifiable(_playlists);
   List<Band> get followedBands => List.unmodifiable(_followedBands);
@@ -39,7 +36,7 @@ class LibraryViewModel extends ViewModel {
       _playlists = playlists;
       _followedBands = followed;
     } catch (e) {
-      _errorMessage = 'Error cargando biblioteca: ${describeError(e)}';
+      _errorMessage = 'No se pudo cargar tu biblioteca. ${describeError(e)}';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -53,7 +50,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return pl;
     } catch (e) {
-      _errorMessage = 'Error creando playlist: ${describeError(e)}';
+      _errorMessage = 'No se pudo crear la playlist. ${describeError(e)}';
       notifyListeners();
       return null;
     }
@@ -75,7 +72,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error sumando canción a playlist: ${describeError(e)}';
+      _errorMessage = 'No se pudo sumar la canción a la playlist. ${describeError(e)}';
       notifyListeners();
       return false;
     }
@@ -94,7 +91,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error quitando canción de playlist: ${describeError(e)}';
+      _errorMessage = 'No se pudo quitar la canción de la playlist. ${describeError(e)}';
       notifyListeners();
       return false;
     }
@@ -109,7 +106,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error eliminando playlist: ${describeError(e)}';
+      _errorMessage = 'No se pudo eliminar la playlist. ${describeError(e)}';
       notifyListeners();
       return false;
     }

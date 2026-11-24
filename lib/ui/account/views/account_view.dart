@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:streamtunes/ui/core/widgets/error_banner.dart';
 import 'package:streamtunes/domain/models/app_user.dart';
 import 'package:streamtunes/ui/session/view_models/session_view_model.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
@@ -32,14 +33,10 @@ class _AccountViewState extends State<AccountView> {
     final user = sessionVM.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mi Cuenta'),
-      ),
+      appBar: AppBar(title: const Text('Mi Cuenta')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: user == null || user.isAnonymous
-            ? _buildAuthForm(sessionVM)
-            : _buildProfileView(sessionVM, user),
+        child: user == null || user.isAnonymous ? _buildAuthForm(sessionVM) : _buildProfileView(sessionVM, user),
       ),
     );
   }
@@ -54,22 +51,12 @@ class _AccountViewState extends State<AccountView> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  height: 96,
-                  width: 96,
-                  fit: BoxFit.cover,
-                ),
+                child: Image.asset('assets/images/logo.png', height: 96, width: 96, fit: BoxFit.cover),
               ),
               const SizedBox(height: 12),
               const Text(
                 'STREAMTUNES',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2.5,
-                  color: Colors.white,
-                ),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2.5, color: Colors.white),
               ),
               const SizedBox(height: 4),
               const Text(
@@ -82,10 +69,7 @@ class _AccountViewState extends State<AccountView> {
         const SizedBox(height: 20),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -101,16 +85,9 @@ class _AccountViewState extends State<AccountView> {
               const SizedBox(height: 16),
 
               if (sessionVM.errorMessage != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorRed.withAlpha(40),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    sessionVM.errorMessage!,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
+                ErrorBanner(
+                  title: _isRegistering ? 'No se pudo crear la cuenta' : 'No se pudo iniciar sesión',
+                  message: sessionVM.errorMessage!,
                 ),
                 const SizedBox(height: 14),
               ],
@@ -118,10 +95,7 @@ class _AccountViewState extends State<AccountView> {
               if (_isRegistering) ...[
                 TextField(
                   controller: _displayNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre o Apodo',
-                    hintText: 'Ej. Juan Rock',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Nombre o Apodo', hintText: 'Ej. Juan Rock'),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -129,19 +103,14 @@ class _AccountViewState extends State<AccountView> {
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Correo Electrónico',
-                  hintText: 'usuario@correo.com',
-                ),
+                decoration: const InputDecoration(labelText: 'Correo Electrónico', hintText: 'usuario@correo.com'),
               ),
               const SizedBox(height: 12),
 
               TextField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Contraseña',
-                ),
+                decoration: const InputDecoration(labelText: 'Contraseña'),
               ),
               const SizedBox(height: 16),
 
@@ -155,18 +124,18 @@ class _AccountViewState extends State<AccountView> {
                           final password = _passwordController.text.trim();
                           if (email.isNotEmpty && password.isNotEmpty) {
                             if (_isRegistering) {
-                              await sessionVM.signUpWithEmail(
-                                email,
-                                password,
-                                _displayNameController.text.trim(),
-                              );
+                              await sessionVM.signUpWithEmail(email, password, _displayNameController.text.trim());
                             } else {
                               await sessionVM.signInWithEmail(email, password);
                             }
                           }
                         },
                   child: sessionVM.isLoading
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                        )
                       : Text(_isRegistering ? 'Registrarse' : 'Ingresar'),
                 ),
               ),
@@ -197,10 +166,7 @@ class _AccountViewState extends State<AccountView> {
         // Tarjeta de Perfil
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
           child: Row(
             children: [
               CircleAvatar(
@@ -216,10 +182,7 @@ class _AccountViewState extends State<AccountView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      user.displayName,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                    Text(user.displayName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Text(
                       user.isAdmin
@@ -238,10 +201,7 @@ class _AccountViewState extends State<AccountView> {
         // Ley de Privacidad y Consentimiento Expreso (Opt-in)
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -249,7 +209,10 @@ class _AccountViewState extends State<AccountView> {
                 children: [
                   Icon(Icons.privacy_tip_outlined, color: AppTheme.primary, size: 20),
                   SizedBox(width: 8),
-                  Text('PRIVACIDAD Y TOP FANS (OPT-IN)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                  Text(
+                    'PRIVACIDAD Y TOP FANS (OPT-IN)',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -260,7 +223,10 @@ class _AccountViewState extends State<AccountView> {
               const SizedBox(height: 10),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Mostrar mi perfil en rankings públicos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                title: const Text(
+                  'Mostrar mi perfil en rankings públicos',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
                 value: user.isPublicProfile,
                 activeThumbColor: AppTheme.primary,
                 onChanged: (val) => sessionVM.togglePrivacyOptIn(val),
@@ -287,16 +253,20 @@ class _AccountViewState extends State<AccountView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Panel de Moderación del Colectivo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text('Aprobar bandas nuevas, revisar reportes y spend cap.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      Text(
+                        'Panel de Moderación del Colectivo',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      Text(
+                        'Aprobar bandas nuevas, revisar reportes y spend cap.',
+                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (ctx) => const AdminModerationView()),
-                    );
+                    Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => const AdminModerationView()));
                   },
                   child: const Text('Entrar'),
                 ),
@@ -310,14 +280,14 @@ class _AccountViewState extends State<AccountView> {
         if (user.hasAnyBand && user.bandRoles.length > 1) ...[
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              borderRadius: BorderRadius.circular(16),
-            ),
+            decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('CAMBIAR DE BANDA ACTIVA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                const Text(
+                  'CAMBIAR DE BANDA ACTIVA',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                ),
                 const SizedBox(height: 10),
                 ...user.bandRoles.keys.map((bandId) {
                   final isCurrent = sessionVM.activeBand?.id == bandId;
@@ -351,12 +321,7 @@ class _AccountViewState extends State<AccountView> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  height: 36,
-                  width: 36,
-                  fit: BoxFit.cover,
-                ),
+                child: Image.asset('assets/images/logo.png', height: 36, width: 36, fit: BoxFit.cover),
               ),
               const SizedBox(height: 6),
               const Text(

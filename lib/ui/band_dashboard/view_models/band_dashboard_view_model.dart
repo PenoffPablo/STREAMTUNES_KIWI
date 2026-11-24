@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository.dart';
@@ -37,6 +38,8 @@ class BandDashboardViewModel extends ViewModel {
   BandBalance? _balance;
   List<BandPayout> _payouts = [];
   String? _metricsError;
+  String? _accountError;
+  int _accountRequestId = 0;
   int _songCount = 0;
   bool _isLoading = false;
   bool _isLoadingMetrics = false;
@@ -79,6 +82,10 @@ class BandDashboardViewModel extends ViewModel {
 
   /// Error de métricas (no bloquea el resto del panel).
   String? get metricsError => _metricsError;
+
+  /// Error al cargar el estado de cuenta. Se muestra sobre los últimos datos
+  /// buenos (no se borra la tarjeta por un corte de red).
+  String? get accountError => _accountError;
   int get songCount => _songCount;
   bool get isLoading => _isLoading;
   bool get isLoadingMetrics => _isLoadingMetrics;
@@ -113,13 +120,13 @@ class BandDashboardViewModel extends ViewModel {
       final p = await _getPrefs();
       // Las métricas y el estado de cuenta son secundarios: si fallan, el
       // resto del panel carga igual.
-      final (band, events, photos, songs, _, account) = await (
+      final (band, events, photos, songs, _, _) = await (
         bandsRepo.getBandById(bandId),
         bandsRepo.getBandEvents(bandId),
         bandsRepo.getBandPhotos(bandId),
         songsRepo.getSongsByBand(bandId),
         _loadMetricsSafely(p),
-        _loadAccountSafely(),
+        _reloadAccount(),
       ).wait.withNetworkTimeout();
 
       _band = band;
@@ -127,11 +134,9 @@ class BandDashboardViewModel extends ViewModel {
       _photos = List.of(photos);
       _songs = List.of(songs);
       _songCount = songs.length;
-      _balance = account.$1;
-      _payouts = account.$2;
       _canExportToday = !_isWithin24Hours(p.getString(_exportKey));
     } catch (e) {
-      _errorMessage = 'Error cargando panel de banda: ${describeError(e)}';
+      _errorMessage = 'No se pudo cargar el panel de tu banda. ${describeError(e)}';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -146,7 +151,7 @@ class BandDashboardViewModel extends ViewModel {
     try {
       await _loadMetrics(await _getPrefs(), forceRefresh: forceRefresh).withNetworkTimeout();
     } catch (e) {
-      _metricsError = 'Error cargando métricas diarias: ${describeError(e)}';
+      _metricsError = 'No se pudieron actualizar las métricas. ${describeError(e)}';
     } finally {
       _isLoadingMetrics = false;
       notifyListeners();
@@ -158,28 +163,33 @@ class BandDashboardViewModel extends ViewModel {
     try {
       await _loadMetrics(p, forceRefresh: false);
     } catch (e) {
-      _metricsError = 'No se pudieron cargar las métricas: ${describeError(e)}';
+      _metricsError = 'No se pudieron cargar las métricas. ${describeError(e)}';
     }
   }
 
-  /// Estado de cuenta y pagos recibidos. Si falla, el panel muestra el resto.
   /// Recarga solo el estado de cuenta (recaudado, cobrado, saldo y pagos).
+  /// La dispara un pago nuevo de esta banda (realtime).
   Future<void> refreshAccount() async {
-    final account = await _loadAccountSafely();
-    _balance = account.$1;
-    _payouts = account.$2;
+    await _reloadAccount();
     notifyListeners();
   }
 
-  Future<(BandBalance?, List<BandPayout>)> _loadAccountSafely() async {
+  /// Carga el estado de cuenta aplicando "la última petición gana": varios
+  /// avisos seguidos del mismo pago no pueden dejar números viejos. Si falla,
+  /// se CONSERVAN el saldo y los pagos anteriores y el error queda visible.
+  Future<void> _reloadAccount() async {
     final repo = payoutsRepo;
-    if (repo == null) return (null, const <BandPayout>[]);
+    if (repo == null) return;
+    final requestId = ++_accountRequestId;
     try {
       final (balance, payouts) = await (repo.getBandBalance(bandId), repo.getPayouts(bandId)).wait;
-      return (balance, payouts);
+      if (requestId != _accountRequestId || isDisposed) return;
+      _balance = balance;
+      _payouts = payouts;
+      _accountError = null;
     } catch (e) {
-      debugPrint('[BandDashboardViewModel] Estado de cuenta no disponible: ${describeError(e)}');
-      return (null, const <BandPayout>[]);
+      if (requestId != _accountRequestId || isDisposed) return;
+      _accountError = 'No se pudo actualizar tu saldo con KIWI. ${describeError(e)}';
     }
   }
 
@@ -206,10 +216,7 @@ class BandDashboardViewModel extends ViewModel {
       }
     }
 
-    final (stats, fans) = await (
-      bandsRepo.getBandAggregatedStats(bandId),
-      bandsRepo.getBandTopFans(bandId),
-    ).wait;
+    final (stats, fans) = await (bandsRepo.getBandAggregatedStats(bandId), bandsRepo.getBandTopFans(bandId)).wait;
     _stats = stats;
     _topFans = fans;
     _isMetricsFromCache = false;
@@ -246,22 +253,24 @@ class BandDashboardViewModel extends ViewModel {
     String? ticketUrl,
   }) async {
     try {
-      final created = await bandsRepo.addBandEvent(BandEvent(
-        id: '',
-        bandId: bandId,
-        title: title,
-        venue: venue,
-        city: city,
-        eventDate: date,
-        ticketUrl: ticketUrl,
-        createdAt: DateTime.now(),
-      ));
+      final created = await bandsRepo.addBandEvent(
+        BandEvent(
+          id: '',
+          bandId: bandId,
+          title: title,
+          venue: venue,
+          city: city,
+          eventDate: date,
+          ticketUrl: ticketUrl,
+          createdAt: DateTime.now(),
+        ),
+      );
       _events
         ..add(created)
         ..sort((a, b) => a.eventDate.compareTo(b.eventDate));
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error agregando fecha: ${describeError(e)}';
+      _errorMessage = 'No se pudo agregar la fecha. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -272,7 +281,7 @@ class BandDashboardViewModel extends ViewModel {
       _events.removeWhere((e) => e.id == eventId);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error eliminando fecha: ${describeError(e)}';
+      _errorMessage = 'No se pudo eliminar la fecha. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -282,17 +291,13 @@ class BandDashboardViewModel extends ViewModel {
 
   Future<void> addPhoto({required String photoUrl, String? caption}) async {
     try {
-      final created = await bandsRepo.addBandPhoto(BandPhoto(
-        id: '',
-        bandId: bandId,
-        photoUrl: photoUrl,
-        caption: caption,
-        createdAt: DateTime.now(),
-      ));
+      final created = await bandsRepo.addBandPhoto(
+        BandPhoto(id: '', bandId: bandId, photoUrl: photoUrl, caption: caption, createdAt: DateTime.now()),
+      );
       _photos.insert(0, created);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error subiendo foto: ${describeError(e)}';
+      _errorMessage = 'No se pudo subir la foto. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -305,7 +310,7 @@ class BandDashboardViewModel extends ViewModel {
       _band = updated;
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error actualizando tienda de merch: ${describeError(e)}';
+      _errorMessage = 'No se pudo actualizar la tienda de merch. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -317,7 +322,8 @@ class BandDashboardViewModel extends ViewModel {
     final lastExport = DateTime.tryParse(p.getString(_exportKey) ?? '');
     if (lastExport != null && DateTime.now().difference(lastExport).inHours < 24) {
       final hoursLeft = 24 - DateTime.now().difference(lastExport).inHours;
-      _errorMessage = 'Cuota diaria alcanzada: el reporte solo puede generarse 1 vez cada '
+      _errorMessage =
+          'Cuota diaria alcanzada: el reporte solo puede generarse 1 vez cada '
           '24 horas. Disponible en $hoursLeft hs.';
       notifyListeners();
       return;
@@ -331,19 +337,14 @@ class BandDashboardViewModel extends ViewModel {
     try {
       // Se copian a datos planos ANTES de cruzar al isolate.
       final rows = [
-        for (final s in _songs)
-          (title: s.title, durationSeconds: s.durationSeconds, playCount: s.playCount),
+        for (final s in _songs) (title: s.title, durationSeconds: s.durationSeconds, playCount: s.playCount),
       ];
-      final report = await reportService.generate(
-        bandId: bandId,
-        bandName: _band?.name ?? 'Banda',
-        songs: rows,
-      );
+      final report = await reportService.generate(bandId: bandId, bandName: _band?.name ?? 'Banda', songs: rows);
       _exportSummary = report.summary;
       _canExportToday = false;
       await p.setString(_exportKey, report.generatedAt.toIso8601String());
     } catch (e) {
-      _errorMessage = 'Error exportando historial: ${describeError(e)}';
+      _errorMessage = 'No se pudo generar el reporte. ${describeError(e)}';
     } finally {
       _isExporting = false;
       notifyListeners();
@@ -360,14 +361,12 @@ class BandDashboardViewModel extends ViewModel {
     try {
       final idx = _songs.indexWhere((s) => s.id == songId);
       if (idx == -1) return false;
-      final saved = await songsRepo.updateSong(
-        _songs[idx].copyWith(title: title, genre: genre, lyricsLrc: lyricsLrc),
-      );
+      final saved = await songsRepo.updateSong(_songs[idx].copyWith(title: title, genre: genre, lyricsLrc: lyricsLrc));
       _songs[idx] = saved;
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error actualizando canción: ${describeError(e)}';
+      _errorMessage = 'No se pudo actualizar la canción. ${describeError(e)}';
       notifyListeners();
       return false;
     }
@@ -382,7 +381,7 @@ class BandDashboardViewModel extends ViewModel {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error eliminando canción: ${describeError(e)}';
+      _errorMessage = 'No se pudo eliminar la canción. ${describeError(e)}';
       notifyListeners();
       return false;
     }

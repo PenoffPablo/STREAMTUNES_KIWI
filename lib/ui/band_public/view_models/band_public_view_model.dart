@@ -60,8 +60,7 @@ class BandPublicViewModel extends ViewModel {
         .where((d) => d.bandId == bandId && d.isApproved)
         .listen(
           _onLiveDonation,
-          onError: (Object e) => _errorMessage =
-              'Se perdió la conexión en vivo: ${describeError(e)}',
+          onError: (Object e) => _errorMessage = 'Se perdió la conexión en vivo: ${describeError(e)}',
         );
     return loadBandData(currentUserId);
   }
@@ -73,9 +72,7 @@ class BandPublicViewModel extends ViewModel {
     _latestLiveDonation = donation;
     _recentDonations.insert(0, donation);
     if (_band != null) {
-      _band = _band!.copyWith(
-        donationsCollected: _band!.donationsCollected + donation.amountArs,
-      );
+      _band = _band!.copyWith(donationsCollected: _band!.donationsCollected + donation.amountArs);
     }
     notifyListeners();
   }
@@ -91,15 +88,7 @@ class BandPublicViewModel extends ViewModel {
     notifyListeners();
 
     try {
-      final (
-        band,
-        songs,
-        events,
-        photos,
-        topFans,
-        donations,
-        isFollowing,
-      ) = await (
+      final (band, songs, events, photos, topFans, donations, isFollowing) = await (
         bandsRepo.getBandById(bandId),
         songsRepo.getSongsByBand(bandId),
         bandsRepo.getBandEvents(bandId),
@@ -107,9 +96,7 @@ class BandPublicViewModel extends ViewModel {
         // El ranking es secundario: si falla, el perfil se muestra igual sin él.
         bandsRepo.getBandTopFans(bandId).catchError((Object _) => <TopFanStat>[]),
         donationsRepo.getDonationsByBand(bandId),
-        currentUserId != null
-            ? bandsRepo.isFollowing(bandId, currentUserId)
-            : Future.value(false),
+        currentUserId != null ? bandsRepo.isFollowing(bandId, currentUserId) : Future.value(false),
       ).wait;
 
       _band = band;
@@ -120,7 +107,7 @@ class BandPublicViewModel extends ViewModel {
       _recentDonations = List.of(donations);
       _isFollowing = isFollowing;
     } catch (e) {
-      _errorMessage = 'Error cargando perfil de la banda: ${describeError(e)}';
+      _errorMessage = 'No se pudo cargar el perfil de la banda. ${describeError(e)}';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -133,9 +120,7 @@ class BandPublicViewModel extends ViewModel {
         await bandsRepo.unfollowBand(bandId, userId);
         _isFollowing = false;
         if (_band != null) {
-          _band = _band!.copyWith(
-            followerCount: (_band!.followerCount - 1).clamp(0, 999999),
-          );
+          _band = _band!.copyWith(followerCount: (_band!.followerCount - 1).clamp(0, 999999));
         }
       } else {
         await bandsRepo.followBand(bandId, userId);
@@ -146,7 +131,7 @@ class BandPublicViewModel extends ViewModel {
       }
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error actualizando seguimiento: ${describeError(e)}';
+      _errorMessage = 'No se pudo actualizar el seguimiento. ${describeError(e)}';
       notifyListeners();
     }
   }

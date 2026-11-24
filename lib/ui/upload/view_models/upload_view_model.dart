@@ -37,9 +37,9 @@ class UploadViewModel extends ViewModel {
     required this.deviceService,
     AudioAnalyzerService? audioAnalyzer,
     BackgroundUploadService? notifications,
-  })  : _ownsAnalyzer = audioAnalyzer == null,
-        audioAnalyzer = audioAnalyzer ?? AudioAnalyzerService(),
-        notifications = notifications ?? BackgroundUploadService();
+  }) : _ownsAnalyzer = audioAnalyzer == null,
+       audioAnalyzer = audioAnalyzer ?? AudioAnalyzerService(),
+       notifications = notifications ?? BackgroundUploadService();
 
   /// Si el analizador lo creó este ViewModel, también lo libera.
   final bool _ownsAnalyzer;
@@ -151,21 +151,21 @@ class UploadViewModel extends ViewModel {
       }
       if (result == null) {
         _selectedAudio = null;
-        _errorMessage = _cancelRequested ? null : 'El análisis no devolvió resultado.';
+        _errorMessage = _cancelRequested ? null : 'No se pudo leer el archivo de audio. Probá con otro archivo.';
         return;
       }
 
       // Verificación de duplicado SHA-256
       final isDup = await songsRepo.isSha256Duplicate(result.sha256).withNetworkTimeout();
       if (isDup) {
-        _errorMessage = 'Este archivo de audio ya fue subido previamente a StreamTunes (SHA-256 duplicado).';
+        _errorMessage = 'Este audio ya está publicado en StreamTunes. Elegí otro archivo.';
         _selectedAudio = null;
         _analysisResult = null;
       } else {
         _analysisResult = result;
       }
     } catch (e) {
-      _errorMessage = 'Error al analizar el audio: ${describeError(e)}';
+      _errorMessage = 'No se pudo analizar el audio. ${describeError(e)}';
       _selectedAudio = null;
       _analysisResult = null;
     } finally {
@@ -206,7 +206,8 @@ class UploadViewModel extends ViewModel {
 
     // Validación de cupo de 20 canciones
     if (hasReachedSongLimit) {
-      _errorMessage = 'Cupo alcanzado: La banda ya tiene $_songCount/$_maxSongs canciones. Elimina una para subir una nueva.';
+      _errorMessage =
+          'Cupo alcanzado: La banda ya tiene $_songCount/$_maxSongs canciones. Elimina una para subir una nueva.';
       notifyListeners();
       return false;
     }
@@ -224,8 +225,7 @@ class UploadViewModel extends ViewModel {
         // Ruta local: el repositorio la sube a Storage. En web no hay ruta y se
         // envían los bytes. Nunca se inventa una URL que no existe.
         audioPath: currentAudio.path,
-        coverUrl: _selectedCoverPath ??
-            'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4',
+        coverUrl: _selectedCoverPath ?? 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4',
         durationSeconds: durationSeconds,
         lyricsLrc: lyricsLrc?.trim(),
         audioSha256: currentAnalysis.sha256,
@@ -249,10 +249,7 @@ class UploadViewModel extends ViewModel {
           bandName: bandName,
         );
       } else {
-        await notifications.showUploadSuccessNotification(
-          songTitle: uploaded.title,
-          bandName: bandName,
-        );
+        await notifications.showUploadSuccessNotification(songTitle: uploaded.title, bandName: bandName);
       }
 
       _successMessage = '¡"$title" fue publicado exitosamente!';

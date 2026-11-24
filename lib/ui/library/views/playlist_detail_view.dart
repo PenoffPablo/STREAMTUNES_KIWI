@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:streamtunes/ui/core/widgets/error_banner.dart';
 import 'package:streamtunes/domain/models/playlist.dart';
 import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
@@ -21,10 +22,9 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
   @override
   void initState() {
     super.initState();
-    _viewModel = DependenciesScope.of(context).createPlaylistDetailViewModel(
-      widget.playlist,
-      LibraryScope.read(context),
-    )..loadSongs(forceRefresh: true);
+    _viewModel = DependenciesScope.of(
+      context,
+    ).createPlaylistDetailViewModel(widget.playlist, LibraryScope.read(context))..loadSongs(forceRefresh: true);
   }
 
   @override
@@ -44,9 +44,11 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
       return;
     }
     PlayerScope.read(context).playSong(queue.first, queue: queue);
-    _showSnack(shuffle
-        ? 'Reproducción aleatoria iniciada (${queue.length} temas)'
-        : 'Reproduciendo "${widget.playlist.title}" en orden');
+    _showSnack(
+      shuffle
+          ? 'Reproducción aleatoria iniciada (${queue.length} temas)'
+          : 'Reproduciendo "${widget.playlist.title}" en orden',
+    );
   }
 
   void _openAddSongsModal() {
@@ -57,9 +59,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => _AddSongsBottomSheet(viewModel: _viewModel),
     );
   }
@@ -108,9 +108,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
     final navigator = Navigator.of(context);
     if (await _viewModel.deletePlaylist() && mounted) {
       navigator.pop();
-      messenger.showSnackBar(
-        SnackBar(content: Text('Playlist "${widget.playlist.title}" eliminada.')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Playlist "${widget.playlist.title}" eliminada.')));
     }
   }
 
@@ -166,10 +164,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    AppTheme.primary.withValues(alpha: 0.25),
-                    AppTheme.surface,
-                  ],
+                  colors: [AppTheme.primary.withValues(alpha: 0.25), AppTheme.surface],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -181,21 +176,14 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                   Container(
                     width: 72,
                     height: 72,
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceLight,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(16)),
                     child: const Icon(Icons.playlist_play, color: AppTheme.primary, size: 44),
                   ),
                   const SizedBox(height: 14),
                   Text(
                     widget.playlist.title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -227,7 +215,10 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                         child: OutlinedButton.icon(
                           onPressed: vm.isEmpty ? null : () => _play(shuffle: true),
                           icon: const Icon(Icons.shuffle, size: 20, color: AppTheme.primary),
-                          label: const Text('Aleatorio', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                          label: const Text(
+                            'Aleatorio',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.primary),
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -295,15 +286,10 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
             else if (vm.errorMessage != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 30),
-                child: Column(
-                  children: [
-                    Text(vm.errorMessage!, style: const TextStyle(color: Colors.redAccent)),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: () => vm.loadSongs(forceRefresh: true),
-                      child: const Text('Reintentar'),
-                    ),
-                  ],
+                child: ErrorBanner(
+                  title: 'No se pudieron cargar los temas de la playlist',
+                  message: vm.errorMessage!,
+                  onRetry: () => vm.loadSongs(forceRefresh: true),
                 ),
               )
             else if (vm.isEmpty)
@@ -325,9 +311,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                   decoration: BoxDecoration(
                     color: isCurrent ? AppTheme.surfaceLight : AppTheme.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isCurrent ? AppTheme.primary.withValues(alpha: 0.5) : Colors.transparent,
-                    ),
+                    border: Border.all(color: isCurrent ? AppTheme.primary.withValues(alpha: 0.5) : Colors.transparent),
                   ),
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -370,10 +354,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                           Container(
                             width: 46,
                             height: 46,
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
                             child: Icon(
                               playerVM.isPlaying ? Icons.pause : Icons.play_arrow,
                               color: AppTheme.primary,
@@ -402,9 +383,7 @@ class _PlaylistDetailViewState extends State<PlaylistDetailView> {
                       children: [
                         IconButton(
                           icon: Icon(
-                            isCurrent && playerVM.isPlaying
-                                ? Icons.pause_circle_filled
-                                : Icons.play_circle_fill,
+                            isCurrent && playerVM.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
                             color: AppTheme.primary,
                             size: 30,
                           ),
@@ -469,9 +448,8 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
   Future<void> _addSong(Song song) async {
     final ok = await _vm.addSong(song);
     if (ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('"${song.title}" sumada a "${_vm.playlist.title}"')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('"${song.title}" sumada a "${_vm.playlist.title}"')));
     }
   }
 
@@ -492,10 +470,7 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
               width: 40,
               height: 4,
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade600,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
             ),
           ),
 
@@ -506,10 +481,7 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Añadir temas a playlist',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Añadir temas a playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     Text(
                       'Sumar canciones a "${_vm.playlist.title}"',
                       style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
@@ -519,10 +491,7 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
+              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
             ],
           ),
           const SizedBox(height: 12),
@@ -546,18 +515,13 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
               filled: true,
               fillColor: AppTheme.surfaceLight,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             ),
           ),
           const SizedBox(height: 12),
 
           // Lista de canciones para sumar
-          Expanded(
-            child: _buildSongList(),
-          ),
+          Expanded(child: _buildSongList()),
         ],
       ),
     );
@@ -570,16 +534,13 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
 
     if (_vm.availableError != null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_vm.availableError!, style: const TextStyle(color: Colors.redAccent)),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _vm.loadAvailableSongs,
-              child: const Text('Reintentar'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: ErrorBanner(
+            title: 'No se pudo cargar el catálogo',
+            message: _vm.availableError!,
+            onRetry: _vm.loadAvailableSongs,
+          ),
         ),
       );
     }
@@ -588,10 +549,7 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
     final addedIds = _vm.songIds;
     if (filtered.isEmpty) {
       return const Center(
-        child: Text(
-          'No se encontraron canciones disponibles.',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
+        child: Text('No se encontraron canciones disponibles.', style: TextStyle(color: AppTheme.textSecondary)),
       );
     }
 
@@ -643,11 +601,7 @@ class _AddSongsBottomSheetState extends State<_AddSongsBottomSheet> {
                       SizedBox(width: 4),
                       Text(
                         'Añadida',
-                        style: TextStyle(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                     ],
                   ),

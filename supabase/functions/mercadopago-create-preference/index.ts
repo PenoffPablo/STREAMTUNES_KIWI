@@ -52,9 +52,10 @@ serve(async (req) => {
   }
   const bandName = String(band.name);
 
-  // id de la donación generado por la app: el webhook lo usa como PK para que
-  // un mismo pago no se registre dos veces (ni por reintentos de MP ni por el
-  // botón "Ya transferí").
+  // Id del intento de aporte que genera la app. Viaja como external_reference
+  // SOLO para trazabilidad (buscar el pago en el panel de Mercado Pago). La
+  // idempotencia del webhook NO depende de él: usa el id del pago de MP, que
+  // no se puede falsificar.
   const donationId = String(body?.donation_id ?? "");
   if (!UUID_RE.test(donationId)) {
     return json({ error: "donation_id (uuid) es obligatorio" }, 400);

@@ -1,6 +1,8 @@
 import 'dart:io' show File;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:streamtunes/ui/core/widgets/error_banner.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 import 'package:streamtunes/ui/upload/view_models/upload_view_model.dart';
@@ -90,9 +92,7 @@ class _UploadViewState extends State<UploadView> {
         appBar: AppBar(title: const Text('Subir Música')),
         body: EmptyStateView(
           icon: activeBand.isPending ? Icons.hourglass_top : Icons.block,
-          title: activeBand.isPending
-              ? 'Banda en Revisión por el Colectivo'
-              : 'Banda Suspendida',
+          title: activeBand.isPending ? 'Banda en Revisión por el Colectivo' : 'Banda Suspendida',
           description: activeBand.isPending
               ? 'Tu banda "${activeBand.name}" está en la lista de espera comunitaria. Un moderador del colectivo la revisará en breve para habilitar las subidas.'
               : 'La banda "${activeBand.name}" se encuentra suspendida temporariamente.',
@@ -107,7 +107,8 @@ class _UploadViewState extends State<UploadView> {
         body: const EmptyStateView(
           icon: Icons.flash_on,
           title: 'Subidas Pausadas por Alta Demanda',
-          description: 'El colectivo activó el freno de emergencia por saturación de tráfico. Pronto reanudaremos las subidas.',
+          description:
+              'El colectivo activó el freno de emergencia por saturación de tráfico. Pronto reanudaremos las subidas.',
         ),
       );
     }
@@ -116,9 +117,7 @@ class _UploadViewState extends State<UploadView> {
       listenable: vm,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(
-            title: Text('Subir Música • ${activeBand.name}'),
-          ),
+          appBar: AppBar(title: Text('Subir Música • ${activeBand.name}')),
           body: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
@@ -130,16 +129,17 @@ class _UploadViewState extends State<UploadView> {
                   decoration: BoxDecoration(
                     color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: vm.hasReachedSongLimit ? AppTheme.errorRed : AppTheme.surfaceLight,
-                    ),
+                    border: Border.all(color: vm.hasReachedSongLimit ? AppTheme.errorRed : AppTheme.surfaceLight),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       Column(
                         children: [
-                          const Text('CUPO DE CANCIONES', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                          const Text(
+                            'CUPO DE CANCIONES',
+                            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             '${vm.songCount} / ${vm.maxSongs}',
@@ -154,7 +154,10 @@ class _UploadViewState extends State<UploadView> {
                       Container(height: 30, width: 1, color: AppTheme.surfaceLight),
                       Column(
                         children: [
-                          const Text('CUPO DE ÁLBUMES/EPS', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                          const Text(
+                            'CUPO DE ÁLBUMES/EPS',
+                            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             '${vm.albumCount} / ${vm.maxAlbums}',
@@ -172,29 +175,7 @@ class _UploadViewState extends State<UploadView> {
                 const SizedBox(height: 16),
 
                 // Mensajes de Alerta o Error
-                if (vm.errorMessage != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.errorRed.withAlpha(40),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.errorRed),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: AppTheme.errorRed, size: 22),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            vm.errorMessage!,
-                            style: const TextStyle(color: Colors.white, fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                if (vm.errorMessage != null) ...[ErrorBanner(message: vm.errorMessage!), const SizedBox(height: 16)],
 
                 if (vm.successMessage != null) ...[
                   Container(
@@ -223,10 +204,7 @@ class _UploadViewState extends State<UploadView> {
                 // 1. Selector de Audio y Análisis en Isolate
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -257,10 +235,7 @@ class _UploadViewState extends State<UploadView> {
                                 style: const TextStyle(color: AppTheme.primary, fontSize: 13),
                               ),
                             ),
-                            TextButton(
-                              onPressed: vm.cancelAnalysis,
-                              child: const Text('Cancelar'),
-                            ),
+                            TextButton(onPressed: vm.cancelAnalysis, child: const Text('Cancelar')),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -281,10 +256,7 @@ class _UploadViewState extends State<UploadView> {
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                             ),
-                            TextButton(
-                              onPressed: () => vm.pickAndAnalyzeAudio(),
-                              child: const Text('Cambiar'),
-                            ),
+                            TextButton(onPressed: () => vm.pickAndAnalyzeAudio(), child: const Text('Cambiar')),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -292,10 +264,7 @@ class _UploadViewState extends State<UploadView> {
                           height: 32,
                           width: double.infinity,
                           child: CustomPaint(
-                            painter: WaveformPainter(
-                              peaks: vm.analysisResult!.waveformPeaks,
-                              progress: 1.0,
-                            ),
+                            painter: WaveformPainter(peaks: vm.analysisResult!.waveformPeaks, progress: 1.0),
                           ),
                         ),
                       ] else ...[
@@ -313,10 +282,7 @@ class _UploadViewState extends State<UploadView> {
                 // 2. Metadatos del Tema
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -360,10 +326,7 @@ class _UploadViewState extends State<UploadView> {
                             child: TextField(
                               controller: _durationController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Duración (segundos) *',
-                                hintText: '>= 60s',
-                              ),
+                              decoration: const InputDecoration(labelText: 'Duración (segundos) *', hintText: '>= 60s'),
                             ),
                           ),
                         ],
@@ -377,10 +340,7 @@ class _UploadViewState extends State<UploadView> {
                           decoration: const InputDecoration(labelText: 'Álbum o EP (Opcional)'),
                           items: [
                             const DropdownMenuItem(value: null, child: Text('Sencillo suelto (Sin álbum)')),
-                            ...vm.bandAlbums.map((a) => DropdownMenuItem(
-                                  value: a.id,
-                                  child: Text(a.title),
-                                )),
+                            ...vm.bandAlbums.map((a) => DropdownMenuItem(value: a.id, child: Text(a.title))),
                           ],
                           onChanged: (val) => setState(() => _selectedAlbumId = val),
                         ),
@@ -392,10 +352,7 @@ class _UploadViewState extends State<UploadView> {
                 // 3. Portada: Cámara nativa vs Galería
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -413,10 +370,7 @@ class _UploadViewState extends State<UploadView> {
                               height: 80,
                               color: AppTheme.surfaceLight,
                               child: vm.selectedCoverPath != null && !kIsWeb
-                                  ? Image.file(
-                                      File(vm.selectedCoverPath!),
-                                      fit: BoxFit.cover,
-                                    )
+                                  ? Image.file(File(vm.selectedCoverPath!), fit: BoxFit.cover)
                                   : const Icon(Icons.image, size: 40, color: AppTheme.textSecondary),
                             ),
                           ),
@@ -459,10 +413,7 @@ class _UploadViewState extends State<UploadView> {
                 // 4. Letra Sincronizada LRC
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -549,7 +500,11 @@ class _UploadViewState extends State<UploadView> {
                         ? const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)),
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                              ),
                               SizedBox(width: 12),
                               Text('Publicando canción...'),
                             ],

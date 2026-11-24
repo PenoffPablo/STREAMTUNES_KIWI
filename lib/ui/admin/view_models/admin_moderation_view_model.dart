@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:streamtunes/data/repositories/donations/donations_repository.dart';
 import 'package:streamtunes/domain/models/app_config.dart';
 import 'package:streamtunes/domain/models/band.dart';
@@ -27,6 +28,7 @@ class AdminModerationViewModel extends ViewModel {
   bool _isLoading = false;
   String? _payingBandId;
   String? _errorMessage;
+  String? _payoutError;
 
   AdminModerationViewModel({
     required this.moderationRepo,
@@ -40,6 +42,10 @@ class AdminModerationViewModel extends ViewModel {
   AppConfig get config => _config;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  /// Por qué falló el último registro de pago (lo muestra la View en un aviso
+  /// puntual, separado de los errores generales del panel).
+  String? get payoutError => _payoutError;
 
   /// Estado de cuenta de todas las bandas, mayor saldo a liquidar primero.
   List<BandBalance> get balances => List.unmodifiable(_balances);
@@ -73,9 +79,7 @@ class AdminModerationViewModel extends ViewModel {
 
   /// Recarga solo saldos y pagos (lo dispara un pago nuevo o una liquidación).
   Future<void> refreshMoney() async {
-    final (balances, payments) = await (_loadBalancesSafely(), _loadPaymentsSafely()).wait;
-    _balances = balances;
-    _recentPayments = payments;
+    await _reloadMoney();
     notifyListeners();
   }
 
@@ -85,72 +89,73 @@ class AdminModerationViewModel extends ViewModel {
     notifyListeners();
 
     try {
-      _moneyError = null;
-      final (bands, reports, config, balances, payments) = await (
+      final (bands, reports, config, _) = await (
         moderationRepo.getPendingBands(),
         moderationRepo.getOpenReports(),
         configRepo.getConfig(),
-        _loadBalancesSafely(),
-        _loadPaymentsSafely(),
+        _reloadMoney(),
       ).wait;
       _pendingBands = bands;
       _openReports = reports;
       _config = config;
-      _balances = balances;
-      _recentPayments = payments;
     } catch (e) {
-      _errorMessage = 'Error cargando datos de moderación: ${describeError(e)}';
+      _errorMessage = 'No se pudo cargar el panel de moderación. ${describeError(e)}';
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Los saldos son una sección más: si fallan, el resto del panel carga
-  /// igual, pero el error queda visible en [moneyError].
-  Future<List<BandBalance>> _loadBalancesSafely() async {
-    final repo = payoutsRepo;
-    if (repo == null) return const [];
-    try {
-      final balances = await repo.getAllBalances();
-      _moneyError = null;
-      return balances;
-    } catch (e) {
-      _moneyError = 'No se pudieron cargar los saldos: ${describeError(e)}';
-      return _balances; // se conserva lo último cargado
-    }
+  /// Número de la recarga de dinero más reciente ("la última petición gana").
+  int _moneyRequestId = 0;
+
+  /// Pide saldos y pagos en paralelo y aplica el resultado SOLO si sigue
+  /// siendo la recarga más reciente. Un mismo pago genera varios avisos en
+  /// vivo (INSERT y reintentos del webhook): sin esto, una respuesta vieja que
+  /// llega última pisaría los números nuevos.
+  ///
+  /// Cada carga devuelve su propio error (en vez de escribir un campo
+  /// compartido), así un error no lo borra otra carga que salió bien. Si una
+  /// falla, se conserva lo último cargado y el error queda en [moneyError].
+  Future<void> _reloadMoney() async {
+    final requestId = ++_moneyRequestId;
+    final payouts = payoutsRepo;
+    final donations = donationsRepo;
+    final (balances, payments) = await (
+      _attempt(payouts?.getAllBalances, 'los saldos de las bandas'),
+      _attempt(donations == null ? null : () => donations.getRecentVerified(), 'los últimos pagos'),
+    ).wait;
+    if (requestId != _moneyRequestId || isDisposed) return; // respuesta vieja
+
+    if (balances.$1 != null) _balances = balances.$1!;
+    if (payments.$1 != null) _recentPayments = payments.$1!;
+    _moneyError = balances.$2 ?? payments.$2;
   }
 
-  Future<List<Donation>> _loadPaymentsSafely() async {
-    final repo = donationsRepo;
-    if (repo == null) return const [];
+  /// Ejecuta [load] y devuelve (dato, null) o (null, mensaje de error legible).
+  Future<(T?, String?)> _attempt<T>(Future<T> Function()? load, String what) async {
+    if (load == null) return (null, null);
     try {
-      return await repo.getRecentVerified();
+      return (await load(), null);
     } catch (e) {
-      _moneyError = 'No se pudieron cargar los pagos: ${describeError(e)}';
-      return _recentPayments;
+      return (null, 'No se pudieron cargar $what. ${describeError(e)}');
     }
   }
 
   /// Registra que KIWI le transfirió [amount] a la banda. La base rechaza
   /// montos mayores al saldo pendiente y avisa a la banda por push.
-  Future<bool> registerPayout({
-    required String bandId,
-    required double amount,
-    String? reference,
-    String? note,
-  }) async {
+  Future<bool> registerPayout({required String bandId, required double amount, String? reference, String? note}) async {
     final repo = payoutsRepo;
     if (repo == null || _payingBandId != null) return false;
     _payingBandId = bandId;
-    _errorMessage = null;
+    _payoutError = null;
     notifyListeners();
     try {
       await repo.registerPayout(bandId: bandId, amount: amount, reference: reference, note: note);
-      _balances = await _loadBalancesSafely();
+      await _reloadMoney();
       return true;
     } catch (e) {
-      _errorMessage = 'No se pudo registrar el pago: ${describeError(e)}';
+      _payoutError = describeError(e);
       return false;
     } finally {
       _payingBandId = null;
@@ -164,7 +169,7 @@ class AdminModerationViewModel extends ViewModel {
       _pendingBands.removeWhere((b) => b.id == bandId);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error aprobando banda: $e';
+      _errorMessage = 'No se pudo aprobar la banda. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -175,7 +180,7 @@ class AdminModerationViewModel extends ViewModel {
       _pendingBands.removeWhere((b) => b.id == bandId);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error rechazando banda: $e';
+      _errorMessage = 'No se pudo rechazar la banda. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -186,7 +191,7 @@ class AdminModerationViewModel extends ViewModel {
       _openReports.removeWhere((r) => r.id == reportId);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error resolviendo reporte: $e';
+      _errorMessage = 'No se pudo resolver el reporte. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -197,7 +202,7 @@ class AdminModerationViewModel extends ViewModel {
       _openReports.removeWhere((r) => r.id == reportId);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error desestimando reporte: $e';
+      _errorMessage = 'No se pudo desestimar el reporte. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -208,7 +213,7 @@ class AdminModerationViewModel extends ViewModel {
       _config = _config.copyWith(spendCapActive: active);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error actualizando tope de gastos: $e';
+      _errorMessage = 'No se pudo cambiar el freno de emergencia. ${describeError(e)}';
       notifyListeners();
     }
   }

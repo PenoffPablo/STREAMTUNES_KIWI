@@ -1,5 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:streamtunes/ui/core/widgets/error_banner.dart';
+import 'package:streamtunes/utils/async_utils.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/domain/models/band_event.dart';
@@ -32,8 +35,7 @@ class _BandDashboardViewState extends State<BandDashboardView> {
     final activeBand = SessionScope.of(context).activeBand;
     if (activeBand != null && _viewModel?.bandId != activeBand.id) {
       _viewModel?.dispose();
-      _viewModel = DependenciesScope.of(context).createBandDashboardViewModel(activeBand.id)
-        ..loadDashboard();
+      _viewModel = DependenciesScope.of(context).createBandDashboardViewModel(activeBand.id)..loadDashboard();
     }
   }
 
@@ -45,10 +47,14 @@ class _BandDashboardViewState extends State<BandDashboardView> {
 
   void _showResult(bool ok, String okText, String errorText) {
     if (!mounted) return;
+    if (!ok) {
+      showErrorSnackBar(context, message: errorText.isEmpty ? kUnexpectedErrorMessage : errorText);
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: ok ? AppTheme.primary : Colors.redAccent,
-        content: Text(ok ? okText : errorText, style: TextStyle(color: ok ? Colors.black : Colors.white)),
+        backgroundColor: AppTheme.primary,
+        content: Text(okText, style: const TextStyle(color: Colors.black)),
       ),
     );
   }
@@ -95,9 +101,8 @@ class _BandDashboardViewState extends State<BandDashboardView> {
     );
     if (caption == null || !mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Subiendo foto del recital...'), duration: Duration(seconds: 2)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Subiendo foto del recital...'), duration: Duration(seconds: 2)));
     await vm.addPhoto(photoUrl: pickedPath, caption: caption.isEmpty ? null : caption);
     _showResult(vm.errorMessage == null, '¡Foto añadida a la galería con éxito!', vm.errorMessage ?? '');
   }
@@ -105,14 +110,14 @@ class _BandDashboardViewState extends State<BandDashboardView> {
   Future<void> _showEditSongDialog(Song song) async {
     final data = await EditSongDialog.show(context, song);
     if (data == null) return;
-    final ok = await _viewModel?.editSong(
-          songId: song.id,
-          title: data.title,
-          genre: data.genre,
-          lyricsLrc: data.lyricsLrc,
-        ) ??
+    final ok =
+        await _viewModel?.editSong(songId: song.id, title: data.title, genre: data.genre, lyricsLrc: data.lyricsLrc) ??
         false;
-    _showResult(ok, '¡Canción "${data.title}" actualizada con éxito!', 'Error al actualizar la canción.');
+    _showResult(
+      ok,
+      '¡Canción "${data.title}" actualizada con éxito!',
+      _viewModel?.errorMessage ?? 'No se pudo actualizar la canción.',
+    );
   }
 
   Future<void> _confirmDeleteSong(Song song) async {
@@ -143,7 +148,11 @@ class _BandDashboardViewState extends State<BandDashboardView> {
     );
     if (confirmed != true) return;
     final ok = await _viewModel?.deleteSong(song.id) ?? false;
-    _showResult(ok, 'Canción "${song.title}" eliminada y cupo liberado.', 'Error al eliminar la canción.');
+    _showResult(
+      ok,
+      'Canción "${song.title}" eliminada y cupo liberado.',
+      _viewModel?.errorMessage ?? 'No se pudo eliminar la canción.',
+    );
   }
 
   Future<void> _showEditMerchDialog(Band band) async {
@@ -205,12 +214,7 @@ class _BandDashboardViewState extends State<BandDashboardView> {
         return Scaffold(
           appBar: AppBar(
             title: Text('Panel • ${band.name}'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => _viewModel?.loadDashboard(),
-              ),
-            ],
+            actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => _viewModel?.loadDashboard())],
           ),
           body: _viewModel!.isLoading
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
@@ -224,9 +228,10 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                     // 2. Métricas Diarias del Artista (RPC band_aggregated_stats y band_top_fans)
                     if (_viewModel!.metricsError != null) ...[
                       // Un fallo de red ya no se ve como "0 reproducciones".
-                      Text(
-                        _viewModel!.metricsError!,
-                        style: const TextStyle(color: AppTheme.accentOrange, fontSize: 12),
+                      ErrorBanner(
+                        warning: true,
+                        message: _viewModel!.metricsError!,
+                        onRetry: () => _viewModel!.loadDailyMetrics(forceRefresh: true),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -235,11 +240,17 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                     _buildExportCard(_viewModel!),
                     const SizedBox(height: 16),
 
-                    // Estado de cuenta con KIWI (aportes cobrados y liquidaciones)
-                    if (_viewModel!.balance != null) ...[
-                      _buildAccountCard(_viewModel!),
-                      const SizedBox(height: 16),
+                    // Estado de cuenta con KIWI (aportes cobrados y liquidaciones).
+                    // Si falla la actualización se conserva el último saldo y se avisa.
+                    if (_viewModel!.accountError != null) ...[
+                      ErrorBanner(
+                        warning: true,
+                        message: _viewModel!.accountError!,
+                        onRetry: _viewModel!.refreshAccount,
+                      ),
+                      const SizedBox(height: 8),
                     ],
+                    if (_viewModel!.balance != null) ...[_buildAccountCard(_viewModel!), const SizedBox(height: 16)],
 
                     // 3. Mis Canciones Subidas (Gestión, Edición y Borrado de catálogo)
                     _buildSongsManagementCard(_viewModel!.songs),
@@ -256,10 +267,7 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                     // 6. Configuración de Tienda de Merch
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
                       child: Row(
                         children: [
                           const Icon(Icons.shopping_bag_outlined, color: AppTheme.primary),
@@ -280,7 +288,9 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                           ),
                           ElevatedButton(
                             onPressed: () => _showEditMerchDialog(band),
-                            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
                             child: const Text('Editar'),
                           ),
                         ],
@@ -313,7 +323,12 @@ class _BandDashboardViewState extends State<BandDashboardView> {
               const Expanded(
                 child: Text(
                   'CÓDIGO QR INTELIGENTE (RECITALES & SÓTANOS)',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.primary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                    color: AppTheme.primary,
+                  ),
                 ),
               ),
             ],
@@ -326,16 +341,8 @@ class _BandDashboardViewState extends State<BandDashboardView> {
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: QrImageView(
-              data: qrData,
-              version: QrVersions.auto,
-              size: 160.0,
-              backgroundColor: Colors.white,
-            ),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            child: QrImageView(data: qrData, version: QrVersions.auto, size: 160.0, backgroundColor: Colors.white),
           ),
           const SizedBox(height: 10),
           Text(
@@ -355,15 +362,18 @@ class _BandDashboardViewState extends State<BandDashboardView> {
   Widget _buildAccountCard(BandDashboardViewModel vm) {
     final b = vm.balance!;
     Widget stat(String label, String value, {Color? color}) => Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-              const SizedBox(height: 2),
-              Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-            ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
           ),
-        );
+        ],
+      ),
+    );
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -381,7 +391,12 @@ class _BandDashboardViewState extends State<BandDashboardView> {
               SizedBox(width: 8),
               Text(
                 'TUS APORTES CON KIWI',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.primary),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1,
+                  color: AppTheme.primary,
+                ),
               ),
             ],
           ),
@@ -449,11 +464,11 @@ class _BandDashboardViewState extends State<BandDashboardView> {
           const SizedBox(width: 8),
           vm.isExporting
               ? const SizedBox(
-                  width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-              : TextButton(
-                  onPressed: vm.canExportToday ? _exportHistory : null,
-                  child: const Text('Exportar'),
-                ),
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                )
+              : TextButton(onPressed: vm.canExportToday ? _exportHistory : null, child: const Text('Exportar')),
         ],
       ),
     );
@@ -463,10 +478,7 @@ class _BandDashboardViewState extends State<BandDashboardView> {
     if (_viewModel!.isLoadingMetrics) {
       return Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
         child: const Center(
           child: Column(
             children: [
@@ -551,21 +563,14 @@ class _BandDashboardViewState extends State<BandDashboardView> {
     }
 
     return Column(
-      children: [
-        _buildServerStats(stats),
-        const SizedBox(height: 16),
-        _buildTopFansCard(_viewModel!.topFans),
-      ],
+      children: [_buildServerStats(stats), const SizedBox(height: 16), _buildTopFansCard(_viewModel!.topFans)],
     );
   }
 
   Widget _buildServerStats(BandAggregatedStats stats) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -574,7 +579,12 @@ class _BandDashboardViewState extends State<BandDashboardView> {
             children: [
               const Text(
                 'MÉTRICAS DEL SERVIDOR (POSTGRESQL RPC)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.textSecondary),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1,
+                  color: AppTheme.textSecondary,
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -610,16 +620,21 @@ class _BandDashboardViewState extends State<BandDashboardView> {
             const Divider(height: 24, color: AppTheme.surfaceLight),
             const Text('Top 5 Canciones de la Banda:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 8),
-            ...stats.topSongs.map((s) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(s.title, style: const TextStyle(fontSize: 13))),
-                      Text('${s.playCount} plays', style: const TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                )),
+            ...stats.topSongs.map(
+              (s) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: Text(s.title, style: const TextStyle(fontSize: 13))),
+                    Text(
+                      '${s.playCount} plays',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ],
       ),
@@ -629,7 +644,10 @@ class _BandDashboardViewState extends State<BandDashboardView> {
   Widget _metricTile(String label, String value) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary),
+        ),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
       ],
@@ -639,41 +657,54 @@ class _BandDashboardViewState extends State<BandDashboardView> {
   Widget _buildTopFansCard(List<TopFanStat> fans) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'TOP 10 FANS (RESPETANDO OPT-IN PRIVACIDAD)',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.textSecondary),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
+              color: AppTheme.textSecondary,
+            ),
           ),
           const SizedBox(height: 8),
           if (fans.isEmpty)
-            const Text('Sin actividad registrada.', style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic))
+            const Text(
+              'Sin actividad registrada.',
+              style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+            )
           else
-            ...fans.map((f) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Text('#${f.rank}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          f.isPublic ? f.displayName : 'Fan anónimo (Privado)',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontStyle: f.isPublic ? FontStyle.normal : FontStyle.italic,
-                            color: f.isPublic ? AppTheme.textPrimary : AppTheme.textSecondary,
-                          ),
+            ...fans.map(
+              (f) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      '#${f.rank}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        f.isPublic ? f.displayName : 'Fan anónimo (Privado)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontStyle: f.isPublic ? FontStyle.normal : FontStyle.italic,
+                          color: f.isPublic ? AppTheme.textPrimary : AppTheme.textSecondary,
                         ),
                       ),
-                      Text('${f.minutesListened} min', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                    ],
-                  ),
-                )),
+                    ),
+                    Text(
+                      '${f.minutesListened} min',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -682,10 +713,7 @@ class _BandDashboardViewState extends State<BandDashboardView> {
   Widget _buildSongsManagementCard(List<Song> songs) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -703,10 +731,7 @@ class _BandDashboardViewState extends State<BandDashboardView> {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceLight,
-                  borderRadius: BorderRadius.circular(6),
-                ),
+                decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(6)),
                 child: Text(
                   '${songs.length}/20 Temas',
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
@@ -809,32 +834,40 @@ class _BandDashboardViewState extends State<BandDashboardView> {
   Widget _buildEventsCard(List<BandEvent> events) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('AGENDA DE SHOWS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-              IconButton(icon: const Icon(Icons.add, color: AppTheme.primary), onPressed: _showAddEventDialog),
+              const Text(
+                'AGENDA DE SHOWS',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add, color: AppTheme.primary),
+                onPressed: _showAddEventDialog,
+              ),
             ],
           ),
           if (events.isEmpty)
-            const Text('No hay fechas cargadas.', style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic))
+            const Text(
+              'No hay fechas cargadas.',
+              style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+            )
           else
-            ...events.map((e) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(e.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: Text('${e.venue} • ${e.city} (${e.eventDate.day}/${e.eventDate.month})'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.errorRed),
-                    onPressed: () => _viewModel?.deleteEvent(e.id),
-                  ),
-                )),
+            ...events.map(
+              (e) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(e.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                subtitle: Text('${e.venue} • ${e.city} (${e.eventDate.day}/${e.eventDate.month})'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.errorRed),
+                  onPressed: () => _viewModel?.deleteEvent(e.id),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -843,22 +876,28 @@ class _BandDashboardViewState extends State<BandDashboardView> {
   Widget _buildPhotosCard(List<BandPhoto> photos) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('FOTOS DE SHOWS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-              IconButton(icon: const Icon(Icons.add_a_photo, color: AppTheme.primary), onPressed: _showAddPhotoDialog),
+              const Text(
+                'FOTOS DE SHOWS',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_a_photo, color: AppTheme.primary),
+                onPressed: _showAddPhotoDialog,
+              ),
             ],
           ),
           if (photos.isEmpty)
-            const Text('No hay fotos en la galería.', style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic))
+            const Text(
+              'No hay fotos en la galería.',
+              style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+            )
           else
             SizedBox(
               height: 90,

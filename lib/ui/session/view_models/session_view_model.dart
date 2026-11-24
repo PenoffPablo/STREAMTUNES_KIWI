@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:streamtunes/data/repositories/auth/auth_repository.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository.dart';
@@ -64,18 +65,18 @@ class SessionViewModel extends ViewModel {
     _authSub = authRepo.authStateChanges
         .asyncMap((user) async => (user, await _loadFirstBand(user)))
         .listen(
-      (event) {
-        final (user, band) = event;
-        _currentUser = user;
-        _activeBand = band;
-        notifyListeners();
-        unawaited(_syncPushRegistration());
-      },
-      onError: (Object e) {
-        _errorMessage = 'Error de sesión: ${describeError(e)}';
-        notifyListeners();
-      },
-    );
+          (event) {
+            final (user, band) = event;
+            _currentUser = user;
+            _activeBand = band;
+            notifyListeners();
+            unawaited(_syncPushRegistration());
+          },
+          onError: (Object e) {
+            _errorMessage = 'Hubo un problema con tu sesión. ${describeError(e)}';
+            notifyListeners();
+          },
+        );
     // Si el token FCM rota, se vuelve a registrar para el usuario actual.
     _tokenRefreshSub = push?.onTokenRefresh.listen((token) => _saveToken(token));
     await loadConfig();
@@ -133,7 +134,8 @@ class SessionViewModel extends ViewModel {
       _activeBand = await _loadFirstBand(user);
       unawaited(_syncPushRegistration());
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      // "Invalid login credentials" -> "Email o contraseña incorrectos.", etc.
+      _errorMessage = describeError(e);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -170,7 +172,7 @@ class SessionViewModel extends ViewModel {
       _currentUser = _currentUser!.copyWith(isPublicProfile: value);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error actualizando privacidad: ${describeError(e)}';
+      _errorMessage = 'No se pudo cambiar la privacidad de tu perfil. ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -183,7 +185,7 @@ class SessionViewModel extends ViewModel {
         notifyListeners();
       }
     } catch (e) {
-      _errorMessage = 'No se pudo cambiar de banda: ${describeError(e)}';
+      _errorMessage = 'No se pudo cambiar de banda. ${describeError(e)}';
       notifyListeners();
     }
   }

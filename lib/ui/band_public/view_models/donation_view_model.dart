@@ -22,8 +22,7 @@ class DonationViewModel extends ViewModel {
     required this.paymentsRepo,
     required this.launcher,
     this.maxAmount = 5000,
-    String? donationId,
-  }) : donationId = donationId ?? const Uuid().v4();
+  });
 
   final Band band;
   final AppUser? currentUser;
@@ -34,9 +33,12 @@ class DonationViewModel extends ViewModel {
   /// mayores, así que no se ofrecen ni se cobran.
   final double maxAmount;
 
-  /// Id de ESTE intento de aporte. Viaja en el pago y el webhook lo usa como
-  /// id de la fila: si Mercado Pago reintenta el aviso, no se duplica.
-  final String donationId;
+  /// Id del ÚLTIMO intento de pago (uno nuevo cada vez que se toca "Pagar").
+  /// Viaja a Mercado Pago solo para trazabilidad: la idempotencia del webhook
+  /// usa el id del pago de MP. Si el fan paga dos veces desde el mismo modal,
+  /// son dos aportes distintos y quedan registrados los dos.
+  String? _donationId;
+  String? get donationId => _donationId;
 
   static const List<double> _allPresets = [1000, 2500, 5000, 10000];
 
@@ -63,8 +65,6 @@ class DonationViewModel extends ViewModel {
   double get estimatedFee => _amount * kGatewayFeeRate;
   double get netBandAmount => (_amount - estimatedFee).clamp(0.0, double.infinity);
 
-  String get donorName =>
-      _isAnonymous ? 'Fan anónimo' : (currentUser?.displayName ?? 'Fan de la banda');
 
   void setAmountText(String text) {
     _amount = double.tryParse(text.replaceAll(',', '.')) ?? 0;
@@ -82,6 +82,7 @@ class DonationViewModel extends ViewModel {
   /// checkout. El aporte aparece en el muro cuando Mercado Pago lo aprueba.
   Future<void> startCheckout() async {
     if (!canPay) return;
+    final attemptId = _donationId = const Uuid().v4(); // un id por intento
     _isOpeningCheckout = true;
     _errorMessage = null;
     notifyListeners();
@@ -89,12 +90,9 @@ class DonationViewModel extends ViewModel {
     try {
       final initPoint = await paymentsRepo
           .createDonationCheckout(
-            donationId: donationId,
+            donationId: attemptId,
             bandId: band.id,
-            bandName: band.name,
             amount: _amount,
-            donorUserId: currentUser?.id,
-            donorName: donorName,
             message: _message.isEmpty ? null : _message,
             isAnonymous: _isAnonymous,
           )
@@ -108,7 +106,7 @@ class DonationViewModel extends ViewModel {
         _errorMessage = 'No se pudo abrir Mercado Pago en este dispositivo.';
       }
     } catch (e) {
-      _errorMessage = 'No se pudo iniciar el pago: ${describeError(e)}';
+      _errorMessage = describeError(e);
     } finally {
       _isOpeningCheckout = false;
       notifyListeners();

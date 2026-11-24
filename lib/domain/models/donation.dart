@@ -98,18 +98,4 @@ class Donation {
       bandName: band is Map ? band['name'] as String? : null,
     );
   }
-
-  /// Fila con las columnas reales de `public.donations`.
-  Map<String, dynamic> toJson() {
-    return {
-      if (id.isNotEmpty) 'id': id,
-      'band_id': bandId,
-      'donor_id': donorUserId,
-      'amount': amountArs,
-      'currency': 'ARS',
-      'message': message,
-      'is_public': !isAnonymous,
-      'status': status,
-    };
-  }
 }

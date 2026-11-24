@@ -217,7 +217,7 @@ void main() {
       await vm.loadModerationData();
 
       expect(await vm.registerPayout(bandId: _bandId, amount: 1000), isFalse);
-      expect(vm.errorMessage, contains('supera el saldo pendiente'));
+      expect(vm.payoutError, contains('supera el saldo pendiente'));
       expect(vm.totalPending, 940, reason: 'el saldo no cambia');
     });
   });

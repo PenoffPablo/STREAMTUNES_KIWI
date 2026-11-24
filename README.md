@@ -40,7 +40,7 @@ StreamTunes es una plataforma nativa de streaming musical y gestión comunitaria
 El modelo tradicional de distribución digital a menudo excluye o precariza a los artistas independientes debido a intermediarios costosos, requerimientos de conectividad constante y métricas de consumo opacas. 
 
 StreamTunes responde a esta problemática implementando:
-1. **Conexión Directa:** Soporte financiero voluntario y directo a través de transferencias y preferencias dinámicas de Mercado Pago sin comisiones ocultas.
+1. **Aportes transparentes:** los fans aportan con Mercado Pago a la cuenta de KIWI, y KIWI le liquida a cada banda el neto verificado. La banda ve en su panel lo recaudado, la comisión de Mercado Pago, lo cobrado y lo pendiente.
 2. **Resiliencia en Recitales:** Mecanismo offline para captura y suscripción a bandas en recitales subterráneos o espacios cerrados con señal deficiente, sincronizándose de manera automática al recuperar red.
 3. **Gestión Integral:** Herramientas para que cada agrupación administre su discografía, conciertos, galerías y estadísticas con cuotas controladas para mitigar la saturación de infraestructura.
 
@@ -124,7 +124,8 @@ El menú inferior y las secciones disponibles se adaptan estrictamente al contex
 4. **Liquidación:** un moderador ve en su panel cuánto le debe KIWI a cada banda (neto verificado − ya pagado), hace la transferencia y la **registra** con el número de operación. La banda recibe un push y ve en su panel lo recaudado, lo ya cobrado y lo que le falta cobrar.
 
 Detalles:
-* Cada intento de aporte tiene un id (uuid) que viaja en el pago: los reintentos del webhook no duplican.
+* Cada pago de Mercado Pago se registra una sola vez: `donations.mp_payment_id` es único y el webhook hace *upsert* por ese id, así los reintentos de Mercado Pago no duplican. Cada intento del fan lleva además un id propio (solo para trazabilidad), así dos pagos desde el mismo modal son dos aportes.
+* Si Mercado Pago devuelve o contracargo un pago, el webhook lo marca `refunded` y deja de contar para el saldo de la banda.
 * El donante se toma de la sesión (JWT), nunca del cliente.
 * No se puede liquidar más que el saldo pendiente: la base lo impide, aunque dos moderadores registren pagos a la vez.
 * Solo cuentan para el saldo los pagos **verificados por Mercado Pago**. Las donaciones anteriores al webhook se muestran en el muro, pero no se liquidan.
@@ -134,7 +135,9 @@ Detalles:
 * La app registra el token FCM del dispositivo en `device_tokens` al iniciar sesión, lo actualiza cuando rota y lo borra al cerrar sesión.
 * La Edge Function `send-push` (disparada por Database Webhooks) envía:
   * **Nuevo tema** a los seguidores de la banda (INSERT en `songs`).
-  * **Aporte recibido** a los miembros de la banda (INSERT en `donations`).
+  * **Aporte recibido** a los miembros de la banda (INSERT o UPDATE en `donations`, cuando queda aprobada).
+  * **Liquidación** a los miembros de la banda cuando KIWI registra un pago (INSERT en `band_payouts`).
+* Son tres Database Webhooks (`push_nuevo_tema`, `push_nueva_donacion`, `push_liquidacion`) que mandan el header `x-webhook-secret`; `send-push` rechaza cualquier llamada sin ese secreto.
 * Push con la app abierta: se muestra como notificación local. Push con la app en segundo plano o cerrada: lo muestra el sistema operativo.
 * Al tocar la notificación se abre el perfil de la banda.
 
@@ -212,7 +215,8 @@ El backend opera sobre PostgreSQL con políticas estrictas de seguridad a nivel 
 * `playlists`: Agrupaciones creadas por los usuarios con soporte de ordenamiento numérico.
 * `playlist_songs`: Tabla relacional que vincula temas y listas manteniendo la posición secuencial.
 * `band_follows`: Relación muchos a muchos entre usuarios y bandas seguidas.
-* `donations`: Registro contable de transferencias, estados de aprobación y mensajes públicos/privados.
+* `donations`: Aportes verificados por Mercado Pago (bruto, neto, id del pago, estado y mensaje). Solo los escribe el webhook.
+* `band_payouts`: Liquidaciones de KIWI a cada banda (monto, número de operación). Solo las registra un moderador; la base impide pagar más que el saldo.
 * `device_tokens`: Tokens FCM por dispositivo (cada usuario solo ve los suyos).
 * `app_admins`: Lista de control de acceso para miembros con facultades de moderación sobre el colectivo.
 * `band_events` y `band_photos`: Fechas de conciertos y galerías de presentaciones.
@@ -283,6 +287,11 @@ La migración `20261124010000_kiwi_collects_payouts.sql` reemplaza ese flujo por
 * Agrega `mp_payment_id` y `net_amount` a `donations`.
 * Agrega la tabla `band_payouts` (liquidaciones), con RLS: la banda ve las suyas y solo un moderador registra pagos.
 * Agrega la función `band_balances` (saldo por banda) y un trigger que impide liquidar más que el saldo.
+
+La migración `20261124020000_payment_idempotency.sql` hace único `donations.mp_payment_id`: un mismo pago de Mercado Pago no puede registrarse dos veces.
+
+### Limitación conocida
+Los paneles se actualizan solos cuando entra un **aporte** (Realtime sobre `donations`). Las **liquidaciones** (`band_payouts`) no se escuchan en vivo: el panel del moderador se actualiza al registrarlas, y la banda ve la suya al recibir el push o al recargar su panel.
 
 ### Secretos de Mercado Pago
 ```bash
