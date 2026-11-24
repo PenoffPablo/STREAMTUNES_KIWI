@@ -41,6 +41,13 @@ class FakeDonationsRepository implements DonationsRepository {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
+  @override
+  Future<List<Donation>> getRecentVerified({int limit = 20}) async {
+    final verified = _donations.where((d) => d.isApproved && d.isVerified).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return verified.take(limit).toList();
+  }
+
   /// Simula lo que hace el webhook de Mercado Pago al aprobar un pago
   /// (en la app real no hay inserción desde el cliente). Para tests y demo.
   void addApproved(Donation donation) {

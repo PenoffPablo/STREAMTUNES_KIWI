@@ -20,7 +20,7 @@ class _AdminModerationViewState extends State<AdminModerationView> {
   void initState() {
     super.initState();
     _viewModel = DependenciesScope.of(context).createAdminModerationViewModel()
-      ..loadModerationData();
+      ..init();
   }
 
   @override
@@ -341,10 +341,41 @@ class _AdminModerationViewState extends State<AdminModerationView> {
     );
   }
 
+
+  static String _money(double v) =>
+      v == v.roundToDouble() ? '\$${v.toStringAsFixed(0)}' : '\$${v.toStringAsFixed(2)}';
+
+  static String _dateTime(DateTime d) {
+    final l = d.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${l.day}/${l.month} ${two(l.hour)}:${two(l.minute)}';
+  }
+
   /// KIWI cobra todos los aportes en su cuenta de Mercado Pago. Acá el
-  /// moderador ve cuánto le debe a cada banda y registra cada transferencia.
+  /// moderador ve cuánto entró, cuánto le debe a cada banda y registra cada
+  /// transferencia. Se actualiza solo cuando entra un pago (realtime).
   Widget _buildPayoutsSection(AdminModerationViewModel vm) {
-    final withMovement = vm.balances.where((b) => b.netCollected > 0 || b.paid > 0).toList();
+    final bandsWithMovement = vm.balances.where((b) => b.collected > 0 || b.paid > 0).toList();
+
+    Widget total(String label, double value, {Color? color}) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+              const SizedBox(height: 2),
+              Text(_money(value), style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+            ],
+          ),
+        );
+
+    Widget sectionTitle(String text) => Padding(
+          padding: const EdgeInsets.only(top: 14, bottom: 4),
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: AppTheme.textSecondary),
+          ),
+        );
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -361,38 +392,60 @@ class _AdminModerationViewState extends State<AdminModerationView> {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'LIQUIDACIONES A BANDAS',
+                  'APORTES Y LIQUIDACIONES',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                 ),
               ),
-              Text(
-                'KIWI debe \$${vm.totalPending.toStringAsFixed(0)}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
+              IconButton(
+                tooltip: 'Actualizar',
+                icon: const Icon(Icons.refresh, size: 20),
+                onPressed: vm.refreshMoney,
               ),
+            ],
+          ),
+
+          if (vm.moneyError != null) ...[
+            Text(vm.moneyError!, style: const TextStyle(color: AppTheme.accentOrange, fontSize: 12)),
+            const SizedBox(height: 6),
+          ],
+
+          // Resumen general
+          Row(
+            children: [
+              total('Recaudado', vm.totalCollected),
+              total('Comisión MP', vm.totalFees),
+              total('Ya liquidado', vm.totalPaid),
+              total('KIWI debe', vm.totalPending, color: AppTheme.primary),
             ],
           ),
           const SizedBox(height: 6),
           const Text(
-            'Solo cuentan los pagos verificados por Mercado Pago (neto de comisión). '
-            'Registrá cada transferencia después de hacerla desde la cuenta de KIWI.',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            'Solo cuentan pagos verificados por Mercado Pago. Lo que KIWI debe es el neto '
+            '(descontada la comisión) menos lo ya liquidado.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
           ),
-          const SizedBox(height: 8),
-          if (withMovement.isEmpty)
+
+          // Saldo por banda
+          sectionTitle('SALDO POR BANDA'),
+          if (bandsWithMovement.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
+              padding: EdgeInsets.symmetric(vertical: 6),
               child: Text('Todavía no hay aportes verificados.', style: TextStyle(color: AppTheme.textSecondary)),
             )
           else
-            for (final b in withMovement)
+            for (final b in bandsWithMovement)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(b.bandName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                dense: true,
+                title: Text(b.bandName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: Text(
-                  'Neto \$${b.netCollected.toStringAsFixed(0)} · pagado \$${b.paid.toStringAsFixed(0)}'
-                  '${b.lastPayoutAt != null ? ' · último ${b.lastPayoutAt!.day}/${b.lastPayoutAt!.month}' : ''}',
+                  'Recaudó ${_money(b.collected)} · neto ${_money(b.netCollected)} · '
+                  'liquidado ${_money(b.paid)}'
+                  '${b.lastPayoutAt != null ? ' (último ${b.lastPayoutAt!.toLocal().day}/${b.lastPayoutAt!.toLocal().month})' : ''}\n'
+                  'KIWI le debe: ${_money(b.pending)}',
                   style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                 ),
+                isThreeLine: true,
                 trailing: vm.isPaying(b.bandId)
                     ? const SizedBox(
                         width: 22,
@@ -402,9 +455,44 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                     : b.hasPending
                         ? ElevatedButton(
                             onPressed: () => _pay(b),
-                            child: Text('Pagar \$${b.pending.toStringAsFixed(0)}'),
+                            child: Text('Pagar ${_money(b.pending)}'),
                           )
                         : const Icon(Icons.check_circle, color: AppTheme.primary),
+              ),
+
+          // Pagos recibidos
+          sectionTitle('ÚLTIMOS PAGOS RECIBIDOS'),
+          if (vm.recentPayments.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Text('Todavía no entraron pagos.', style: TextStyle(color: AppTheme.textSecondary)),
+            )
+          else
+            for (final d in vm.recentPayments)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    const Icon(Icons.arrow_downward, size: 16, color: AppTheme.primary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${d.bandName ?? 'Banda'} · ${d.donorName}\n${_dateTime(d.createdAt)}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(_money(d.amountArs), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          'neto ${_money(d.netOrAmount)}',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
         ],
       ),

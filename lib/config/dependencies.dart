@@ -233,6 +233,7 @@ class AppDependencies {
         bandsRepo: bandsRepository,
         songsRepo: songsRepository,
         payoutsRepo: payoutsRepository,
+        donationsRepo: donationsRepository,
         deviceService: deviceService,
         reportService: reportService,
         bandId: bandId,
@@ -249,6 +250,7 @@ class AppDependencies {
   AdminModerationViewModel createAdminModerationViewModel() => AdminModerationViewModel(
         moderationRepo: moderationRepository,
         payoutsRepo: payoutsRepository,
+        donationsRepo: donationsRepository,
         configRepo: configRepository,
       );
 

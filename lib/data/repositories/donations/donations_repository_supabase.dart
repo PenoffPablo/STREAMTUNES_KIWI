@@ -86,6 +86,22 @@ class SupabaseDonationsRepository implements DonationsRepository {
   }
 
   @override
+  Future<List<Donation>> getRecentVerified({int limit = 20}) async {
+    final res =
+        await (_client
+                .from('donations')
+                .select(
+                  '*, band:bands(name), donor:profiles!donations_donor_id_fkey(display_name)',
+                )
+                .eq('status', 'approved')
+                .not('mp_payment_id', 'is', null)
+                .order('created_at', ascending: false)
+                .limit(limit))
+            .withNetworkTimeout();
+    return (res as List).map((json) => Donation.fromJson(json)).toList();
+  }
+
+  @override
   void dispose() {
     _unsubscribeRealtime();
     _streamController.close();

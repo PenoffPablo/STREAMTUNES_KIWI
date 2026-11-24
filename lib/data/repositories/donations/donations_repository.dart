@@ -15,5 +15,9 @@ abstract class DonationsRepository {
   /// Muro público: solo donaciones aprobadas.
   Future<List<Donation>> getDonationsByBand(String bandId);
 
+  /// Últimos pagos verificados por Mercado Pago, de todas las bandas, con el
+  /// nombre de la banda y el neto que recibió KIWI (panel de moderación).
+  Future<List<Donation>> getRecentVerified({int limit = 20});
+
   void dispose();
 }

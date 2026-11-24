@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository.dart';
+import 'package:streamtunes/data/repositories/donations/donations_repository.dart';
 import 'package:streamtunes/data/repositories/payouts/payouts_repository.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository.dart';
 import 'package:streamtunes/data/services/device/device_capabilities_service.dart';
@@ -11,6 +13,7 @@ import 'package:streamtunes/domain/models/band_event.dart';
 import 'package:streamtunes/domain/models/band_photo.dart';
 import 'package:streamtunes/domain/models/band_stats.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
+import 'package:streamtunes/domain/models/donation.dart';
 import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
 import 'package:streamtunes/utils/async_utils.dart';
@@ -19,6 +22,7 @@ class BandDashboardViewModel extends ViewModel {
   final BandsRepository bandsRepo;
   final SongsRepository songsRepo;
   final PayoutsRepository? payoutsRepo;
+  final DonationsRepository? donationsRepo;
   final DeviceCapabilitiesService? deviceService;
   final BandReportService reportService;
   final String bandId;
@@ -51,6 +55,7 @@ class BandDashboardViewModel extends ViewModel {
     required this.songsRepo,
     required this.bandId,
     this.payoutsRepo,
+    this.donationsRepo,
     this.deviceService,
     this.reportService = const BandReportService(),
     this.prefs,
@@ -66,6 +71,8 @@ class BandDashboardViewModel extends ViewModel {
   /// Estado de cuenta con KIWI: recaudado (verificado por Mercado Pago),
   /// ya liquidado y saldo pendiente. `null` si no se pudo cargar.
   BandBalance? get balance => _balance;
+
+  StreamSubscription<Donation>? _liveSub;
 
   /// Pagos que KIWI le hizo a la banda, más reciente primero.
   List<BandPayout> get payouts => List.unmodifiable(_payouts);
@@ -93,6 +100,11 @@ class BandDashboardViewModel extends ViewModel {
 
   /// Carga el panel: datos livianos siempre + métricas pesadas (máx. 1 vez por día).
   Future<void> loadDashboard() async {
+    // En vivo: cuando el webhook aprueba un aporte para ESTA banda, se
+    // recalcula el estado de cuenta sin recargar todo el panel.
+    _liveSub ??= donationsRepo?.donationCreatedStream
+        .where((d) => d.bandId == bandId && d.isApproved)
+        .listen((_) => unawaited(refreshAccount()));
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -151,6 +163,14 @@ class BandDashboardViewModel extends ViewModel {
   }
 
   /// Estado de cuenta y pagos recibidos. Si falla, el panel muestra el resto.
+  /// Recarga solo el estado de cuenta (recaudado, cobrado, saldo y pagos).
+  Future<void> refreshAccount() async {
+    final account = await _loadAccountSafely();
+    _balance = account.$1;
+    _payouts = account.$2;
+    notifyListeners();
+  }
+
   Future<(BandBalance?, List<BandPayout>)> _loadAccountSafely() async {
     final repo = payoutsRepo;
     if (repo == null) return (null, const <BandPayout>[]);
@@ -366,5 +386,11 @@ class BandDashboardViewModel extends ViewModel {
       notifyListeners();
       return false;
     }
+  }
+
+  @override
+  void dispose() {
+    _liveSub?.cancel();
+    super.dispose();
   }
 }
