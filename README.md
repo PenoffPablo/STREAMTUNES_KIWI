@@ -16,7 +16,7 @@ StreamTunes es una plataforma nativa de streaming musical y gestión comunitaria
   - [Reproductor y Experiencia Auditiva](#reproductor-y-experiencia-auditiva)
   - [Sistema de Roles y Navegacion Adaptativa](#sistema-de-roles-y-navegacion-adaptativa)
   - [Panel de Control para Musicos (Dashboard)](#panel-de-control-para-musicos-dashboard)
-  - [Aportes y Pasarela de Pago (Mercado Pago)](#aportes-y-pasarela-de-pago-mercado-pago)
+  - [Aportes y Liquidaciones (Mercado Pago + KIWI)](#aportes-y-liquidaciones-mercado-pago--kiwi)
   - [Notificaciones Push (Firebase Cloud Messaging)](#notificaciones-push-firebase-cloud-messaging)
   - [Resiliencia Offline y Escaneo QR Inteligente](#resiliencia-offline-y-escaneo-qr-inteligente)
   - [Ingesta y Validacion Criptografica de Audio](#ingesta-y-validacion-criptografica-de-audio)
@@ -115,18 +115,20 @@ El menú inferior y las secciones disponibles se adaptan estrictamente al contex
 * **Agenda de Conciertos:** Alta, baja y consulta de fechas de presentaciones en vivo con enlace a boleterías.
 * **Galería Fotográfica:** Mantenimiento visual de registros fotográficos de eventos pasados.
 
-### Aportes y Pasarela de Pago (Mercado Pago)
-* La preferencia de pago se crea en la Edge Function `mercadopago-create-preference`. El **Access Token vive solo en el servidor** (secret), nunca en la app.
-* Cada intento de donación tiene un id (uuid) generado por la app, que viaja a Mercado Pago. Ni los reintentos de Mercado Pago ni el botón "Ya transferí" generan duplicados.
-* **El fan no puede aprobarse a sí mismo.** "Ya transferí" registra la donación como **pendiente**: no suma al total, no aparece en el muro y le avisa a la banda por push. Después:
-  * si el fan pagó con el **checkout**, el webhook la aprueba con el **monto real** que cobró Mercado Pago;
-  * si **transfirió al alias**, la banda la confirma o rechaza en **"Aportes por confirmar"** de su panel.
-* Al aprobarse, el trigger de la base suma al total y el aporte aparece en el muro en tiempo real.
-* El donante se toma de la sesión (JWT), nunca del cliente. Sin sesión, la donación queda sin donante.
-* Si la banda no cargó un alias propio, solo se ofrece el checkout: no hay alias por defecto.
-* Desglose transparente de la comisión estimada frente al monto neto para el artista.
-* Donaciones en tiempo real en el perfil público mediante Supabase Realtime.
-* Si la pasarela no está disponible, se copia el alias y se abre la app de Mercado Pago.
+### Aportes y Liquidaciones (Mercado Pago + KIWI)
+**Modelo de cobro:** todos los aportes entran a la cuenta de Mercado Pago de **KIWI**, y después KIWI le transfiere a cada banda lo que le corresponde.
+
+1. **El fan paga con el checkout de Mercado Pago.** La preferencia la crea la Edge Function `mercadopago-create-preference` con la cuenta de KIWI. El **Access Token vive solo en el servidor**, nunca en la app.
+2. **El webhook verifica el pago contra la API de Mercado Pago** y recién ahí registra la donación, con el monto real, el **neto** que recibió KIWI y el id del pago. La app **nunca** inserta ni aprueba donaciones: no se pueden falsificar.
+3. **El aporte aparece en el muro en tiempo real** (Supabase Realtime) y la banda recibe un push.
+4. **Liquidación:** un moderador ve en su panel cuánto le debe KIWI a cada banda (neto verificado − ya pagado), hace la transferencia y la **registra** con el número de operación. La banda recibe un push y ve en su panel lo recaudado, lo ya cobrado y lo que le falta cobrar.
+
+Detalles:
+* Cada intento de aporte tiene un id (uuid) que viaja en el pago: los reintentos del webhook no duplican.
+* El donante se toma de la sesión (JWT), nunca del cliente.
+* No se puede liquidar más que el saldo pendiente: la base lo impide, aunque dos moderadores registren pagos a la vez.
+* Solo cuentan para el saldo los pagos **verificados por Mercado Pago**. Las donaciones anteriores al webhook se muestran en el muro, pero no se liquidan.
+* No existe la transferencia directa a un alias, a propósito: un pago sin referencia no se puede verificar.
 
 ### Notificaciones Push (Firebase Cloud Messaging)
 * La app registra el token FCM del dispositivo en `device_tokens` al iniciar sesión, lo actualiza cuando rota y lo borra al cerrar sesión.
@@ -276,7 +278,11 @@ La migración `20261124000000_donations_pending.sql` hace dos cosas:
 * La app solo puede insertar donaciones `pending`. Los miembros de la banda pueden cambiar **solo** la columna `status` de sus pendientes, a aprobada o rechazada.
 * El total de la banda se ajusta si el webhook corrige el monto de una donación ya aprobada.
 
-**Limitación conocida:** con la clave pública se pueden crear pendientes sin límite. No afectan el total ni el muro, y la banda las puede rechazar.
+La migración `20261124010000_kiwi_collects_payouts.sql` reemplaza ese flujo por el modelo de cobro de KIWI:
+* Quita las escrituras de donaciones desde la app: solo el webhook (service role) registra pagos.
+* Agrega `mp_payment_id` y `net_amount` a `donations`.
+* Agrega la tabla `band_payouts` (liquidaciones), con RLS: la banda ve las suyas y solo un moderador registra pagos.
+* Agrega la función `band_balances` (saldo por banda) y un trigger que impide liquidar más que el saldo.
 
 ### Secretos de Mercado Pago
 ```bash

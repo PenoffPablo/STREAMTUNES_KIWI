@@ -7,13 +7,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.CAMERA"/>
 
-    <!-- Package visibility para consultar y abrir la app nativa de Mercado Pago en Android 11+ -->
+    <!-- Package visibility (Android 11+): url_launcher abre el checkout de Mercado Pago y links externos -->
     <queries>
-        <package android:name="com.mercadopago.wallet" />
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="mercadopago" />
-        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />

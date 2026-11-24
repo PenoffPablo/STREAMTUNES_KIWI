@@ -3,12 +3,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:streamtunes/data/repositories/auth/auth_repository_fake.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository_fake.dart';
 import 'package:streamtunes/data/repositories/config/config_repository_fake.dart';
-import 'package:streamtunes/data/repositories/donations/donations_repository_fake.dart';
+import 'package:streamtunes/data/repositories/moderation/moderation_repository_fake.dart';
+import 'package:streamtunes/data/repositories/payouts/payouts_repository_fake.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository_fake.dart';
 import 'package:streamtunes/data/services/storage/pending_follow_service.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/domain/models/band_stats.dart';
-import 'package:streamtunes/domain/models/donation.dart';
+import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dart';
 import 'package:streamtunes/ui/band_dashboard/view_models/band_dashboard_view_model.dart';
 import 'package:streamtunes/ui/home/view_models/home_view_model.dart';
 import 'package:streamtunes/ui/session/view_models/session_view_model.dart';
@@ -141,20 +142,18 @@ void main() {
   });
 
   group('Panel de banda', () {
-    BandDashboardViewModel dashboard(_FlakyBandsRepository bands, FakeDonationsRepository donations) =>
+    BandDashboardViewModel dashboard(_FlakyBandsRepository bands, FakePayoutsRepository payouts) =>
         BandDashboardViewModel(
           bandsRepo: bands,
           songsRepo: FakeSongsRepository(),
-          donationsRepo: donations,
+          payoutsRepo: payouts,
           bandId: _bandId,
           prefs: prefs,
         );
 
     test('un error de red en métricas NO se guarda en caché ni tira abajo el panel', () async {
       final bands = _FlakyBandsRepository()..statsFail = true;
-      final donations = FakeDonationsRepository();
-      addTearDown(donations.dispose);
-      final vm = dashboard(bands, donations);
+      final vm = dashboard(bands, FakePayoutsRepository());
       addTearDown(vm.dispose);
 
       await vm.loadDashboard();
@@ -166,76 +165,60 @@ void main() {
           reason: 'un fallo no puede quedar cacheado 24 h como si fueran ceros');
     });
 
-    test('la banda confirma un aporte pendiente: suma al total y sale de la lista', () async {
-      final bands = _FlakyBandsRepository();
-      final donations = FakeDonationsRepository();
-      addTearDown(donations.dispose);
-      final pending = await donations.createDonation(Donation(
-        id: 'don-pendiente-1',
-        bandId: _bandId,
-        donorName: 'Fan',
-        amountArs: 1500,
-        createdAt: DateTime.now(),
-      ));
-      expect(pending.status, 'pending');
+    test('muestra el estado de cuenta con KIWI: recaudado, cobrado y saldo', () async {
+      final payouts = FakePayoutsRepository(
+        collected: {_bandId: (name: 'Los Fuzzers', gross: 10000, net: 9400)},
+      );
+      await payouts.registerPayout(bandId: _bandId, amount: 4000, reference: 'OP-1');
 
-      final vm = dashboard(bands, donations);
+      final vm = dashboard(_FlakyBandsRepository(), payouts);
       addTearDown(vm.dispose);
       await vm.loadDashboard();
-      expect(vm.pendingDonations.map((d) => d.id), contains('don-pendiente-1'));
-      final totalBefore = vm.band!.donationsCollected;
 
-      expect(await vm.reviewDonation(pending, approved: true), isTrue);
-      expect(vm.pendingDonations, isEmpty);
-      expect(vm.band!.donationsCollected, totalBefore + 1500);
-      expect((await donations.getDonationsByBand(_bandId)).map((d) => d.id), contains('don-pendiente-1'));
+      final b = vm.balance!;
+      expect(b.collected, 10000);
+      expect(b.netCollected, 9400);
+      expect(b.mercadoPagoFees, 600);
+      expect(b.paid, 4000);
+      expect(b.pending, 5400);
+      expect(vm.payouts.single.reference, 'OP-1');
+    });
+  });
+
+  group('Liquidaciones (moderación)', () {
+    AdminModerationViewModel admin(FakePayoutsRepository payouts) => AdminModerationViewModel(
+          moderationRepo: FakeModerationRepository(),
+          configRepo: FakeConfigRepository(),
+          payoutsRepo: payouts,
+        );
+
+    test('el moderador ve cuánto debe KIWI y registra un pago que baja el saldo', () async {
+      final payouts = FakePayoutsRepository(
+        collected: {_bandId: (name: 'Los Fuzzers', gross: 5000, net: 4700)},
+      );
+      final vm = admin(payouts);
+      addTearDown(vm.dispose);
+      await vm.loadModerationData();
+      expect(vm.totalPending, 4700);
+
+      expect(await vm.registerPayout(bandId: _bandId, amount: 4700, reference: 'OP-99'), isTrue);
+
+      expect(vm.totalPending, 0);
+      expect(vm.balances.single.paid, 4700);
+      expect(vm.isPaying(_bandId), isFalse);
     });
 
-    test('revisar un aporte que ya revisó otro miembro informa el error (no finge éxito)', () async {
-      final bands = _FlakyBandsRepository();
-      final donations = FakeDonationsRepository();
-      addTearDown(donations.dispose);
-      final pending = await donations.createDonation(Donation(
-        id: 'don-pendiente-3',
-        bandId: _bandId,
-        donorName: 'Fan',
-        amountArs: 700,
-        createdAt: DateTime.now(),
-      ));
-      final vm = dashboard(bands, donations);
+    test('no se puede liquidar más que el saldo pendiente', () async {
+      final payouts = FakePayoutsRepository(
+        collected: {_bandId: (name: 'Los Fuzzers', gross: 1000, net: 940)},
+      );
+      final vm = admin(payouts);
       addTearDown(vm.dispose);
-      await vm.loadDashboard();
-      final totalBefore = vm.band!.donationsCollected;
+      await vm.loadModerationData();
 
-      // Otro miembro la confirmó mientras tanto.
-      await donations.reviewDonation(pending.id, approved: true);
-
-      expect(await vm.reviewDonation(pending, approved: true), isFalse);
-      expect(vm.errorMessage, contains('ya fue revisado'));
-      expect(vm.band!.donationsCollected, totalBefore, reason: 'no suma dos veces');
-    });
-
-    test('rechazar un aporte no suma nada y no aparece en el muro', () async {
-      final bands = _FlakyBandsRepository();
-      final donations = FakeDonationsRepository();
-      addTearDown(donations.dispose);
-      final pending = await donations.createDonation(Donation(
-        id: 'don-pendiente-2',
-        bandId: _bandId,
-        donorName: 'Fan',
-        amountArs: 900,
-        createdAt: DateTime.now(),
-      ));
-
-      final vm = dashboard(bands, donations);
-      addTearDown(vm.dispose);
-      await vm.loadDashboard();
-      final totalBefore = vm.band!.donationsCollected;
-
-      expect(await vm.reviewDonation(pending, approved: false), isTrue);
-      expect(vm.pendingDonations, isEmpty);
-      expect(vm.band!.donationsCollected, totalBefore);
-      expect((await donations.getDonationsByBand(_bandId)).map((d) => d.id), isNot(contains('don-pendiente-2')));
+      expect(await vm.registerPayout(bandId: _bandId, amount: 1000), isFalse);
+      expect(vm.errorMessage, contains('supera el saldo pendiente'));
+      expect(vm.totalPending, 940, reason: 'el saldo no cambia');
     });
   });
 }

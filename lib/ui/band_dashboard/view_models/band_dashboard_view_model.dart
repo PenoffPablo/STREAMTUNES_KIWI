@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository.dart';
-import 'package:streamtunes/data/repositories/donations/donations_repository.dart';
+import 'package:streamtunes/data/repositories/payouts/payouts_repository.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository.dart';
 import 'package:streamtunes/data/services/device/device_capabilities_service.dart';
 import 'package:streamtunes/data/services/reports/band_report_service.dart';
@@ -10,7 +10,7 @@ import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/domain/models/band_event.dart';
 import 'package:streamtunes/domain/models/band_photo.dart';
 import 'package:streamtunes/domain/models/band_stats.dart';
-import 'package:streamtunes/domain/models/donation.dart';
+import 'package:streamtunes/domain/models/band_payout.dart';
 import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
 import 'package:streamtunes/utils/async_utils.dart';
@@ -18,7 +18,7 @@ import 'package:streamtunes/utils/async_utils.dart';
 class BandDashboardViewModel extends ViewModel {
   final BandsRepository bandsRepo;
   final SongsRepository songsRepo;
-  final DonationsRepository? donationsRepo;
+  final PayoutsRepository? payoutsRepo;
   final DeviceCapabilitiesService? deviceService;
   final BandReportService reportService;
   final String bandId;
@@ -30,8 +30,8 @@ class BandDashboardViewModel extends ViewModel {
   List<BandEvent> _events = [];
   List<BandPhoto> _photos = [];
   List<Song> _songs = [];
-  List<Donation> _pendingDonations = [];
-  final Set<String> _reviewing = {};
+  BandBalance? _balance;
+  List<BandPayout> _payouts = [];
   String? _metricsError;
   int _songCount = 0;
   bool _isLoading = false;
@@ -50,7 +50,7 @@ class BandDashboardViewModel extends ViewModel {
     required this.bandsRepo,
     required this.songsRepo,
     required this.bandId,
-    this.donationsRepo,
+    this.payoutsRepo,
     this.deviceService,
     this.reportService = const BandReportService(),
     this.prefs,
@@ -63,9 +63,12 @@ class BandDashboardViewModel extends ViewModel {
   List<BandPhoto> get photos => List.unmodifiable(_photos);
   List<Song> get songs => List.unmodifiable(_songs);
 
-  /// Transferencias al alias que la banda todavía no confirmó.
-  List<Donation> get pendingDonations => List.unmodifiable(_pendingDonations);
-  bool isReviewing(String donationId) => _reviewing.contains(donationId);
+  /// Estado de cuenta con KIWI: recaudado (verificado por Mercado Pago),
+  /// ya liquidado y saldo pendiente. `null` si no se pudo cargar.
+  BandBalance? get balance => _balance;
+
+  /// Pagos que KIWI le hizo a la banda, más reciente primero.
+  List<BandPayout> get payouts => List.unmodifiable(_payouts);
 
   /// Error de métricas (no bloquea el resto del panel).
   String? get metricsError => _metricsError;
@@ -96,15 +99,15 @@ class BandDashboardViewModel extends ViewModel {
 
     try {
       final p = await _getPrefs();
-      // Las métricas y los aportes pendientes son secundarios: si fallan, el
-      // resto del panel carga igual (cada uno guarda su propio error).
-      final (band, events, photos, songs, _, pending) = await (
+      // Las métricas y el estado de cuenta son secundarios: si fallan, el
+      // resto del panel carga igual.
+      final (band, events, photos, songs, _, account) = await (
         bandsRepo.getBandById(bandId),
         bandsRepo.getBandEvents(bandId),
         bandsRepo.getBandPhotos(bandId),
         songsRepo.getSongsByBand(bandId),
         _loadMetricsSafely(p),
-        _loadPendingSafely(),
+        _loadAccountSafely(),
       ).wait.withNetworkTimeout();
 
       _band = band;
@@ -112,7 +115,8 @@ class BandDashboardViewModel extends ViewModel {
       _photos = List.of(photos);
       _songs = List.of(songs);
       _songCount = songs.length;
-      _pendingDonations = pending;
+      _balance = account.$1;
+      _payouts = account.$2;
       _canExportToday = !_isWithin24Hours(p.getString(_exportKey));
     } catch (e) {
       _errorMessage = 'Error cargando panel de banda: ${describeError(e)}';
@@ -146,43 +150,16 @@ class BandDashboardViewModel extends ViewModel {
     }
   }
 
-  Future<List<Donation>> _loadPendingSafely() async {
-    final repo = donationsRepo;
-    if (repo == null) return const [];
+  /// Estado de cuenta y pagos recibidos. Si falla, el panel muestra el resto.
+  Future<(BandBalance?, List<BandPayout>)> _loadAccountSafely() async {
+    final repo = payoutsRepo;
+    if (repo == null) return (null, const <BandPayout>[]);
     try {
-      return await repo.getPendingDonations(bandId);
+      final (balance, payouts) = await (repo.getBandBalance(bandId), repo.getPayouts(bandId)).wait;
+      return (balance, payouts);
     } catch (e) {
-      debugPrint('[BandDashboardViewModel] Aportes pendientes no disponibles: $e');
-      return const [];
-    }
-  }
-
-  /// La banda confirma que recibió la transferencia (o la rechaza).
-  /// Al confirmarla, el trigger de la base suma el monto al total y el aporte
-  /// aparece en el muro en vivo.
-  Future<bool> reviewDonation(Donation donation, {required bool approved}) async {
-    final repo = donationsRepo;
-    if (repo == null || _reviewing.contains(donation.id)) return false;
-    _reviewing.add(donation.id);
-    notifyListeners();
-    try {
-      await repo.reviewDonation(donation.id, approved: approved);
-      _pendingDonations = [
-        for (final d in _pendingDonations)
-          if (d.id != donation.id) d,
-      ];
-      if (approved && _band != null) {
-        _band = _band!.copyWith(
-          donationsCollected: _band!.donationsCollected + donation.amountArs,
-        );
-      }
-      return true;
-    } catch (e) {
-      _errorMessage = 'No se pudo actualizar el aporte: ${describeError(e)}';
-      return false;
-    } finally {
-      _reviewing.remove(donation.id);
-      notifyListeners();
+      debugPrint('[BandDashboardViewModel] Estado de cuenta no disponible: ${describeError(e)}');
+      return (null, const <BandPayout>[]);
     }
   }
 

@@ -67,6 +67,11 @@ serve(async (req) => {
       band_id: bandId,
       donor_id: (meta.donor_id as string | null) ?? null,
       amount: Number(payment.transaction_amount),
+      // Lo que efectivamente entra a la cuenta de KIWI (descontada la comisión
+      // de MP). Es la base de lo que después se le liquida a la banda.
+      net_amount: Number(payment.transaction_details?.net_received_amount ?? payment.transaction_amount),
+      // Prueba de que el pago fue verificado contra la API de Mercado Pago.
+      mp_payment_id: String(payment.id ?? paymentId),
       currency: "ARS",
       message: (meta.message as string | null) ?? null,
       is_public: meta.is_anonymous !== true,
@@ -74,8 +79,7 @@ serve(async (req) => {
     };
 
     // 3. Upsert por id con los datos REALES del pago:
-    //    * si el fan ya había avisado "Ya transferí", su fila `pending` pasa a
-    //      `approved` con el monto que cobró Mercado Pago (no el declarado);
+    //    * el id es el que generó la app, así un mismo pago es siempre la misma fila;
     //    * si Mercado Pago reintenta, la fila ya está aprobada y el trigger no
     //      vuelve a sumar (solo suma al pasar a approved).
     const { error } = await supabase

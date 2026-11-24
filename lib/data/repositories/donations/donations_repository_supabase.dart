@@ -85,67 +85,6 @@ class SupabaseDonationsRepository implements DonationsRepository {
     return (res as List).map((json) => Donation.fromJson(json)).toList();
   }
 
-  /// Registra la donación declarada por el fan, de forma IDEMPOTENTE.
-  ///
-  /// * Siempre `pending`: el cliente no puede aprobarse a sí mismo (lo exige
-  ///   también la política RLS). La aprueba el webhook de Mercado Pago con el
-  ///   monto real, o la banda desde su panel si fue una transferencia al alias.
-  /// * `donor_id` es el usuario autenticado o `null`.
-  /// * El `id` lo genera la app y viaja en el pago: ON CONFLICT DO NOTHING.
-  /// * Sin `.select()`: una donación pendiente anónima no es visible por RLS,
-  ///   y pedirla de vuelta (RETURNING) haría fallar el insert.
-  @override
-  Future<Donation> createDonation(Donation donation) async {
-    final donorId = _client.auth.currentUser?.id;
-    final pending = Donation(
-      id: donation.id,
-      bandId: donation.bandId,
-      donorUserId: donorId,
-      donorName: donation.donorName,
-      amountArs: donation.amountArs,
-      message: donation.message,
-      isAnonymous: donation.isAnonymous,
-      status: 'pending',
-      createdAt: DateTime.now(),
-    );
-    await (_client
-            .from('donations')
-            .upsert(pending.toJson(), onConflict: 'id', ignoreDuplicates: true))
-        .withNetworkTimeout();
-    return pending;
-  }
-
-  @override
-  Future<List<Donation>> getPendingDonations(String bandId) async {
-    final res =
-        await (_client
-                .from('donations')
-                .select('*, donor:profiles!donations_donor_id_fkey(display_name)')
-                .eq('band_id', bandId)
-                .eq('status', 'pending')
-                .order('created_at', ascending: false))
-            .withNetworkTimeout();
-    return (res as List).map((json) => Donation.fromJson(json)).toList();
-  }
-
-  @override
-  Future<void> reviewDonation(String donationId, {required bool approved}) async {
-    // `.select('id')` devuelve las filas realmente actualizadas: si otro
-    // miembro o el webhook ya la resolvió, no hay filas y se informa, en vez
-    // de mostrar "confirmado" sin haber cambiado nada.
-    final updated =
-        await (_client
-                .from('donations')
-                .update({'status': approved ? 'approved' : 'refunded'})
-                .eq('id', donationId)
-                .eq('status', 'pending')
-                .select('id'))
-            .withNetworkTimeout();
-    if ((updated as List).isEmpty) {
-      throw const AppException('Este aporte ya fue revisado.');
-    }
-  }
-
   @override
   void dispose() {
     _unsubscribeRealtime();

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:streamtunes/data/repositories/auth/auth_repository_fake.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository_fake.dart';
-import 'package:streamtunes/data/repositories/donations/donations_repository_fake.dart';
+import 'package:streamtunes/data/repositories/payments/payments_repository.dart';
 import 'package:streamtunes/data/repositories/payments/payments_repository_fake.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository_fake.dart';
 import 'package:streamtunes/data/services/audio/audio_analyzer_service.dart';
@@ -38,21 +38,35 @@ class _SlowSongsRepository extends FakeSongsRepository {
 }
 
 class _FakeLauncher extends ExternalLauncherService {
-  String? copied;
+  _FakeLauncher({this.canOpen = true});
+  final bool canOpen;
   final List<String> opened = [];
-  bool mercadoPagoOpened = false;
-
-  @override
-  Future<void> copyToClipboard(String text) async => copied = text;
 
   @override
   Future<bool> openUrl(String url) async {
     opened.add(url);
-    return true;
+    return canOpen;
   }
+}
+
+/// Pasarela que devuelve un checkout y registra qué se le pidió.
+class _FakeCheckout implements PaymentsRepository {
+  final List<({String donationId, String bandId, double amount, bool anonymous})> requests = [];
 
   @override
-  Future<bool> openMercadoPagoApp() async => mercadoPagoOpened = true;
+  Future<String?> createDonationCheckout({
+    required String donationId,
+    required String bandId,
+    required String bandName,
+    required double amount,
+    String? donorUserId,
+    String? donorName,
+    String? message,
+    bool isAnonymous = false,
+  }) async {
+    requests.add((donationId: donationId, bandId: bandId, amount: amount, anonymous: isAnonymous));
+    return 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=test';
+  }
 }
 
 class _CounterViewModel extends ViewModel {
@@ -267,98 +281,87 @@ void main() {
     });
   });
 
-  group('DonationViewModel (lógica fuera del widget)', () {
+  group('DonationViewModel (KIWI cobra con el checkout de Mercado Pago)', () {
     final band = Band(
       id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
       name: 'Los Fuzzers',
       slug: 'los-fuzzers',
       genre: 'Rock',
       createdAt: DateTime(2026),
-      socialLinks: const {'alias': 'fuzzers.mp'},
     );
 
-    test('"Ya transferí" registra la donación PENDIENTE: no va al muro hasta que la confirmen', () async {
-      final donations = FakeDonationsRepository();
-      addTearDown(donations.dispose);
+    test('calcula la comisión estimada y el neto para la banda', () {
       final vm = DonationViewModel(
         band: band,
         currentUser: null,
-        donationsRepo: donations,
-        paymentsRepo: FakePaymentsRepository(),
+        paymentsRepo: _FakeCheckout(),
         launcher: _FakeLauncher(),
       );
-
       vm.setAmountText('2000');
       expect(vm.estimatedFee, 120);
       expect(vm.netBandAmount, 1880);
-      expect(vm.alias, 'fuzzers.mp');
-
-      final wallBefore = (await donations.getDonationsByBand(band.id)).length;
-      final emitted = <Donation>[];
-      final sub = donations.donationCreatedStream.listen(emitted.add);
-      addTearDown(sub.cancel);
-
-      expect(await vm.confirmDonation(), isTrue);
-      await pumpEventQueue();
-
-      // Lo que declara el fan no suma ni sale en el muro ni dispara el realtime.
-      expect((await donations.getDonationsByBand(band.id)).length, wallBefore);
-      expect(emitted, isEmpty);
-      final pending = await donations.getPendingDonations(band.id);
-      expect(pending.single.id, vm.donationId);
-      expect(pending.single.amountArs, 2000);
-
-      // La banda confirma que la recibió -> recién ahí entra al muro en vivo.
-      await donations.reviewDonation(vm.donationId, approved: true);
-      await pumpEventQueue();
-      expect(emitted.single.id, vm.donationId);
-      expect((await donations.getDonationsByBand(band.id)).length, wallBefore + 1);
       vm.dispose();
     });
 
-    test('sin pasarela disponible cae al fallback: copia el alias y abre la app de MP', () async {
+    test('abre el checkout de KIWI con el id del intento (para que el webhook no duplique)', () async {
+      final checkout = _FakeCheckout();
       final launcher = _FakeLauncher();
       final vm = DonationViewModel(
         band: band,
         currentUser: null,
-        donationsRepo: FakeDonationsRepository(),
-        paymentsRepo: FakePaymentsRepository(), // devuelve null (sin init_point)
+        paymentsRepo: checkout,
         launcher: launcher,
       );
+      vm.setAmountText('1500');
+      vm.setAnonymous(true);
+
       await vm.startCheckout();
-      expect(launcher.copied, 'fuzzers.mp');
-      expect(launcher.mercadoPagoOpened, isTrue);
+
+      expect(checkout.requests.single.donationId, vm.donationId);
+      expect(checkout.requests.single.amount, 1500);
+      expect(checkout.requests.single.anonymous, isTrue);
+      expect(launcher.opened.single, contains('mercadopago'));
+      expect(vm.checkoutOpened, isTrue);
+      expect(vm.errorMessage, isNull);
       expect(vm.isOpeningCheckout, isFalse);
       vm.dispose();
     });
 
-    test('confirmar dos veces el mismo intento NO duplica la donación (idempotente por id)', () async {
-      final donations = FakeDonationsRepository();
-      addTearDown(donations.dispose);
-      final vm = DonationViewModel(
-        band: band,
-        currentUser: null,
-        donationsRepo: donations,
-        paymentsRepo: FakePaymentsRepository(),
-        launcher: _FakeLauncher(),
-      );
-      // El fan toca "Ya transferí" dos veces (o el webhook ya lo registró).
-      expect(await vm.confirmDonation(), isTrue);
-      expect(await vm.confirmDonation(), isTrue);
-
-      final pending = await donations.getPendingDonations(band.id);
-      expect(pending.where((d) => d.id == vm.donationId), hasLength(1));
-      vm.dispose();
-    });
-
-    test('respeta el tope de app_config: no ofrece ni cobra montos mayores', () async {
+    test('sin pasarela disponible informa el error (no hay caminos alternativos)', () async {
       final launcher = _FakeLauncher();
       final vm = DonationViewModel(
         band: band,
         currentUser: null,
-        donationsRepo: FakeDonationsRepository(),
-        paymentsRepo: FakePaymentsRepository(),
+        paymentsRepo: FakePaymentsRepository(), // devuelve null (sin init_point)
         launcher: launcher,
+      );
+      await vm.startCheckout();
+      expect(launcher.opened, isEmpty);
+      expect(vm.checkoutOpened, isFalse);
+      expect(vm.errorMessage, contains('no están disponibles'));
+      vm.dispose();
+    });
+
+    test('si no se puede abrir Mercado Pago en el dispositivo, lo informa', () async {
+      final vm = DonationViewModel(
+        band: band,
+        currentUser: null,
+        paymentsRepo: _FakeCheckout(),
+        launcher: _FakeLauncher(canOpen: false),
+      );
+      await vm.startCheckout();
+      expect(vm.checkoutOpened, isFalse);
+      expect(vm.errorMessage, contains('No se pudo abrir'));
+      vm.dispose();
+    });
+
+    test('respeta el tope de app_config: no ofrece ni cobra montos mayores', () async {
+      final checkout = _FakeCheckout();
+      final vm = DonationViewModel(
+        band: band,
+        currentUser: null,
+        paymentsRepo: checkout,
+        launcher: _FakeLauncher(),
         maxAmount: 5000,
       );
       expect(vm.presets, isNot(contains(10000)));
@@ -367,36 +370,7 @@ void main() {
       expect(vm.exceedsMax, isTrue);
       expect(vm.canPay, isFalse);
       await vm.startCheckout();
-      expect(launcher.opened, isEmpty);
-      expect(launcher.mercadoPagoOpened, isFalse);
-      expect(await vm.confirmDonation(), isFalse);
-      vm.dispose();
-    });
-
-    test('banda sin alias: no hay alias por defecto ni "Ya transferí"', () async {
-      final launcher = _FakeLauncher();
-      final noAliasBand = Band(
-        id: band.id,
-        name: 'Sin Alias',
-        slug: 'sin-alias',
-        createdAt: DateTime(2026),
-      );
-      final vm = DonationViewModel(
-        band: noAliasBand,
-        currentUser: null,
-        donationsRepo: FakeDonationsRepository(),
-        paymentsRepo: FakePaymentsRepository(), // sin checkout disponible
-        launcher: launcher,
-      );
-
-      expect(vm.alias, isNull);
-      expect(vm.canConfirmTransfer, isFalse);
-      expect(await vm.confirmDonation(), isFalse);
-
-      await vm.startCheckout();
-      expect(launcher.copied, isNull, reason: 'no se copia ningún alias ajeno');
-      expect(launcher.mercadoPagoOpened, isFalse, reason: 'no se manda a transferir a ciegas');
-      expect(vm.errorMessage, contains('no configuró un alias'));
+      expect(checkout.requests, isEmpty);
       vm.dispose();
     });
   });

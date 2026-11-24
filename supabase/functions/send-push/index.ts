@@ -1,10 +1,10 @@
 // Edge Function: envía notificaciones push con Firebase Cloud Messaging (API HTTP v1).
 //
 // Se dispara con Database Webhooks de Supabase (Dashboard > Database > Webhooks):
-//   * INSERT en public.songs              -> SEGUIDORES de la banda ("nuevo tema")
-//   * INSERT en public.donations pending  -> MIEMBROS ("un fan avisó un aporte: confirmalo")
-//   * INSERT/UPDATE a approved            -> MIEMBROS ("recibiste un aporte"), una sola vez
-//     (el webhook de `donations` tiene que tener marcados INSERT **y** UPDATE)
+//   * INSERT en public.songs          -> SEGUIDORES de la banda ("nuevo tema")
+//   * INSERT/UPDATE a approved en
+//     public.donations                 -> MIEMBROS ("recibiste un aporte"), una sola vez
+//   * INSERT en public.band_payouts   -> MIEMBROS ("KIWI te transfirió tu saldo")
 //
 // Secrets necesarios (supabase secrets set ...):
 //   FIREBASE_SERVICE_ACCOUNT  JSON completo de la cuenta de servicio de Firebase
@@ -104,27 +104,14 @@ async function buildPush(
     };
   }
 
+  const members = async () => {
+    const { data } = await supabase.from("band_members").select("user_id").eq("band_id", bandId);
+    return (data ?? []).map((r) => r.user_id as string);
+  };
+  const amount = Number(record.amount ?? 0).toFixed(0);
+
   if (table === "donations") {
-    const amount = Number(record.amount ?? 0).toFixed(0);
-    const members = async () => {
-      const { data } = await supabase.from("band_members").select("user_id").eq("band_id", bandId);
-      return (data ?? []).map((r) => r.user_id as string);
-    };
-
-    // Un fan avisó una transferencia al alias: la banda tiene que confirmarla.
-    if (type === "INSERT" && record.status === "pending") {
-      return {
-        userIds: await members(),
-        push: {
-          title: "⏳ Un fan avisó un aporte",
-          body: `Dice que transfirió $${amount} ARS. Confirmalo en tu panel si lo recibiste.`,
-          bandId,
-        },
-      };
-    }
-
-    // Aporte aprobado: llega como INSERT (pago por checkout sin aviso previo)
-    // o como UPDATE pending -> approved (lo confirmó la banda o el webhook).
+    // Aporte aprobado (lo registra el webhook de MP tras verificar el pago).
     // En UPDATE se exige que ANTES no estuviera aprobado: los reintentos del
     // webhook (approved -> approved) no vuelven a notificar.
     const becameApproved =
@@ -134,7 +121,23 @@ async function buildPush(
 
     return {
       userIds: await members(),
-      push: { title: "💸 ¡Recibiste un aporte!", body: `Un fan aportó $${amount} ARS a la banda.`, bandId },
+      push: {
+        title: "💸 ¡Recibiste un aporte!",
+        body: `Un fan aportó $${amount} ARS. KIWI lo suma a tu saldo a liquidar.`,
+        bandId,
+      },
+    };
+  }
+
+  if (table === "band_payouts") {
+    if (type !== "INSERT") return null;
+    return {
+      userIds: await members(),
+      push: {
+        title: "💰 KIWI te transfirió tu saldo",
+        body: `Se liquidaron $${amount} ARS a la banda. Mirá el detalle en tu panel.`,
+        bandId,
+      },
     };
   }
   return null;

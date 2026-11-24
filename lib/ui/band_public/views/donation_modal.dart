@@ -4,10 +4,14 @@ import 'package:streamtunes/ui/band_public/view_models/donation_view_model.dart'
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 
-/// Modal de aportes voluntarios a bandas mediante Mercado Pago.
+const _mercadoPagoBlue = Color(0xFF009EE3);
+
+/// Modal de aportes voluntarios a bandas.
 ///
-/// Es una View "tonta": dibuja el estado de [DonationViewModel] y le delega las
-/// acciones. El ViewModel se crea en `initState` y se libera en `dispose`.
+/// El fan paga con el checkout de Mercado Pago (cuenta de KIWI); KIWI después
+/// le liquida el aporte a la banda. Es una View "tonta": dibuja el estado de
+/// [DonationViewModel] y le delega las acciones. El ViewModel se crea en
+/// `initState` y se libera en `dispose`.
 class DonationModal extends StatefulWidget {
   final Band band;
 
@@ -50,63 +54,16 @@ class _DonationModalState extends State<DonationModal> {
     super.dispose();
   }
 
-  void _showSnack(
-    String text, {
-    Color? background,
-    Color textColor = Colors.white,
-  }) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: background,
-        content: Text(
-          text,
-          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _copyAlias() async {
-    await _vm.copyAlias();
-    if (!mounted || !_vm.aliasCopied) return;
-    _showSnack(
-      '¡Alias "${_vm.alias}" copiado al portapapeles!',
-      background: const Color(0xFF009EE3),
-    );
-  }
-
   Future<void> _startCheckout() async {
     await _vm.startCheckout();
     if (!mounted) return;
     final error = _vm.errorMessage;
-    if (error != null) _showSnack(error, background: AppTheme.accentOrange);
-  }
-
-  Future<void> _confirm() async {
-    // Se capturan antes del await: después del pop() este context ya no es válido.
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    final amount = _vm.amount.toInt();
-    final ok = await _vm.confirmDonation();
-    if (!mounted) return;
-    if (ok) {
-      navigator.pop();
-      messenger.showSnackBar(
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppTheme.primary,
-          content: Text(
-            '¡Gracias! Avisamos a la banda de tu aporte de \$$amount ARS. Aparece en el muro cuando confirme la transferencia.',
-            style: const TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          backgroundColor: AppTheme.accentOrange,
+          content: Text(error, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ),
-      );
-    } else {
-      _showSnack(
-        _vm.errorMessage ?? 'Error al procesar el aporte.',
-        background: AppTheme.errorRed,
       );
     }
   }
@@ -121,7 +78,6 @@ class _DonationModalState extends State<DonationModal> {
 
   Widget _buildContent(BuildContext context) {
     final vm = _vm;
-    final alias = vm.alias;
 
     return Container(
       padding: EdgeInsets.only(
@@ -139,17 +95,14 @@ class _DonationModalState extends State<DonationModal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Encabezado del modal
+            // Encabezado
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: Text(
                     'Apoyar a ${widget.band.name}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
                 IconButton(
@@ -159,94 +112,12 @@ class _DonationModalState extends State<DonationModal> {
               ],
             ),
             const Text(
-              'Aporte directo y sin intermediarios discográficos mediante Mercado Pago.',
+              'Pagás con Mercado Pago. KIWI recibe tu aporte y se lo transfiere a la banda.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
-            const SizedBox(height: 14),
-
-            // Tarjeta del alias: solo si la banda cargó uno propio.
-            if (alias != null)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF009EE3).withAlpha(25),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: const Color(0xFF009EE3).withAlpha(120),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.payment, size: 18, color: Color(0xFF009EE3)),
-                        SizedBox(width: 8),
-                        Text(
-                          'Mercado Pago Oficial (Argentina)',
-                          style: TextStyle(
-                            color: Color(0xFF009EE3),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Alias de destino:',
-                                style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                              SelectableText(
-                                alias,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF009EE3),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          onPressed: _copyAlias,
-                          icon: Icon(
-                            vm.aliasCopied ? Icons.check : Icons.copy,
-                            size: 16,
-                          ),
-                          label: Text(
-                            vm.aliasCopied ? 'Copiado' : 'Copiar Alias',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
             const SizedBox(height: 16),
 
-            // Botones de selección rápida con montos predefinidos
+            // Montos rápidos (solo los que no superan el tope)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: vm.presets.map((preset) {
@@ -269,44 +140,38 @@ class _DonationModalState extends State<DonationModal> {
             ),
             const SizedBox(height: 12),
 
-            // Campo de monto personalizado, con el tope de app_config
+            // Monto personalizado, con el tope de app_config
             TextField(
               controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Monto a donar en pesos (ARS)',
+                labelText: 'Monto a aportar en pesos (ARS)',
                 prefixText: '\$ ',
-                helperText:
-                    'Aporte libre de hasta \$${vm.maxAmount.toInt()} ARS.',
+                helperText: 'Aporte libre de hasta \$${vm.maxAmount.toInt()} ARS.',
                 errorText: vm.exceedsMax
-                    ? 'El máximo por donación es \$${vm.maxAmount.toInt()} ARS.'
+                    ? 'El máximo por aporte es \$${vm.maxAmount.toInt()} ARS.'
                     : null,
               ),
               onChanged: vm.setAmountText,
             ),
             const SizedBox(height: 12),
 
-            // Mensaje de aliento para la banda
+            // Mensaje para la banda
             TextField(
               controller: _messageController,
               maxLines: 2,
+              maxLength: 200,
               decoration: const InputDecoration(
                 labelText: 'Mensaje de aliento para la banda (opcional)',
                 hintText: '¡Aguante el show del sábado!',
               ),
               onChanged: vm.setMessage,
             ),
-            const SizedBox(height: 8),
 
-            // Opción de Donación Anónima
+            // Anónimo
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text(
-                'Donar de forma anónima',
-                style: TextStyle(fontSize: 14),
-              ),
+              title: const Text('Aportar de forma anónima', style: TextStyle(fontSize: 14)),
               subtitle: const Text(
                 'Tu nombre no aparecerá en el muro público ni en rankings de fans.',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
@@ -317,7 +182,7 @@ class _DonationModalState extends State<DonationModal> {
             ),
             const Divider(color: AppTheme.surfaceLight),
 
-            // Desglose Transparente del aporte
+            // Desglose transparente
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -326,77 +191,27 @@ class _DonationModalState extends State<DonationModal> {
               ),
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total a aportar:',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                      Text(
-                        '\$${vm.amount.toStringAsFixed(2)} ARS',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                  _row('Total a aportar:', '\$${vm.amount.toStringAsFixed(2)} ARS', bold: true),
+                  const SizedBox(height: 4),
+                  _row(
+                    'Comisión estimada de Mercado Pago (6%):',
+                    '-\$${vm.estimatedFee.toStringAsFixed(2)} ARS',
+                    secondary: true,
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Comisión estimada de pasarela (6%):',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      Text(
-                        '-\$${vm.estimatedFee.toStringAsFixed(2)} ARS',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Neto directo a la banda:',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '\$${vm.netBandAmount.toStringAsFixed(2)} ARS',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                  _row(
+                    'Neto estimado para la banda:',
+                    '\$${vm.netBandAmount.toStringAsFixed(2)} ARS',
+                    bold: true,
+                    highlight: true,
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 14),
 
-            if (alias == null) ...[
-              const Text(
-                'Esta banda todavía no configuró un alias: el aporte se hace con el '
-                'checkout de Mercado Pago y queda registrado automáticamente al aprobarse el pago.',
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            // Mensaje orientativo (solo transferencias por alias)
-            if (vm.transferInitiated && alias != null) ...[
+            // Qué pasa después de pagar
+            if (vm.checkoutOpened) ...[
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
@@ -404,21 +219,15 @@ class _DonationModalState extends State<DonationModal> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppTheme.primary.withAlpha(100)),
                 ),
-                child: Row(
+                child: const Row(
                   children: [
-                    const Icon(
-                      Icons.info_outline,
-                      color: AppTheme.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
+                    Icon(Icons.info_outline, color: AppTheme.primary, size: 20),
+                    SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Si pagaste con el checkout, el aporte se registra solo. Si transferiste \$${vm.amount.toInt()} ARS al alias "$alias", presioná "Ya transferí" para publicarlo en el muro.',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                        ),
+                        'Cuando Mercado Pago apruebe el pago, tu aporte aparece en el muro '
+                        'de la banda automáticamente. No hace falta hacer nada más.',
+                        style: TextStyle(fontSize: 12, color: Colors.white),
                       ),
                     ),
                   ],
@@ -427,80 +236,52 @@ class _DonationModalState extends State<DonationModal> {
               const SizedBox(height: 12),
             ],
 
-            // Botón 1: Abrir Mercado Pago y Copiar Alias
+            // Pagar
             SizedBox(
               width: double.infinity,
-              height: 46,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF009EE3),
-                  side: const BorderSide(color: Color(0xFF009EE3), width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+              height: 48,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _mercadoPagoBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: vm.canPay ? _startCheckout : null,
                 icon: vm.isOpeningCheckout
                     ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFF009EE3),
-                        ),
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Icon(Icons.open_in_new, size: 18),
+                    : const Icon(Icons.lock_outline, size: 20),
                 label: Text(
                   vm.isOpeningCheckout
                       ? 'Conectando con Mercado Pago...'
-                      : '1. Pagar \$${vm.amount.toInt()} ARS con Mercado Pago Oficial',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
+                      : 'Pagar \$${vm.amount.toInt()} ARS con Mercado Pago',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-
-            // Botón 2: confirmación de transferencia por alias (no aplica sin alias).
-            if (alias != null)
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: vm.canConfirmTransfer ? _confirm : null,
-                  icon: vm.isSubmitting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.black,
-                          ),
-                        )
-                      : const Icon(Icons.favorite, size: 20),
-                  label: Text(
-                    vm.isSubmitting
-                        ? 'Registrando aporte...'
-                        : '2. Ya transferí (Confirmar mi donación)',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _row(String label, String value, {bool bold = false, bool secondary = false, bool highlight = false}) {
+    final color = highlight ? AppTheme.primary : (secondary ? AppTheme.textSecondary : null);
+    final size = secondary ? 12.0 : 13.0;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: Text(label, style: TextStyle(fontSize: size, color: color, fontWeight: highlight ? FontWeight.bold : null)),
+        ),
+        Text(
+          value,
+          style: TextStyle(fontSize: size, color: color, fontWeight: bold ? FontWeight.bold : null),
+        ),
+      ],
     );
   }
 }

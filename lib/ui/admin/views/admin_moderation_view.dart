@@ -3,6 +3,8 @@ import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dart';
 import 'package:streamtunes/ui/core/widgets/empty_state_view.dart';
+import 'package:streamtunes/domain/models/band_payout.dart';
+import 'package:streamtunes/ui/admin/views/payout_dialog.dart';
 
 class AdminModerationView extends StatefulWidget {
   const AdminModerationView({super.key});
@@ -130,6 +132,10 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 20),
+
+                    // Liquidaciones: lo que KIWI cobró y le debe a cada banda
+                    _buildPayoutsSection(vm),
                     const SizedBox(height: 20),
 
                     // 2. Bandas Pendientes de Aprobación (Filtro anti-copyright y calidad)
@@ -309,6 +315,99 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                 ),
         );
       },
+    );
+  }
+
+  Future<void> _pay(BandBalance balance) async {
+    final data = await PayoutDialog.show(context, balance);
+    if (data == null || !mounted) return;
+    final ok = await _viewModel.registerPayout(
+      bandId: balance.bandId,
+      amount: data.amount,
+      reference: data.reference,
+      note: data.note,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: ok ? AppTheme.primary : AppTheme.errorRed,
+        content: Text(
+          ok
+              ? 'Pago de \$${data.amount.toStringAsFixed(2)} a ${balance.bandName} registrado. La banda recibe un aviso.'
+              : (_viewModel.errorMessage ?? 'No se pudo registrar el pago.'),
+          style: TextStyle(color: ok ? Colors.black : Colors.white),
+        ),
+      ),
+    );
+  }
+
+  /// KIWI cobra todos los aportes en su cuenta de Mercado Pago. Acá el
+  /// moderador ve cuánto le debe a cada banda y registra cada transferencia.
+  Widget _buildPayoutsSection(AdminModerationViewModel vm) {
+    final withMovement = vm.balances.where((b) => b.netCollected > 0 || b.paid > 0).toList();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.surfaceLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.payments_outlined, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'LIQUIDACIONES A BANDAS',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                ),
+              ),
+              Text(
+                'KIWI debe \$${vm.totalPending.toStringAsFixed(0)}',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Solo cuentan los pagos verificados por Mercado Pago (neto de comisión). '
+            'Registrá cada transferencia después de hacerla desde la cuenta de KIWI.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          if (withMovement.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Todavía no hay aportes verificados.', style: TextStyle(color: AppTheme.textSecondary)),
+            )
+          else
+            for (final b in withMovement)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(b.bandName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  'Neto \$${b.netCollected.toStringAsFixed(0)} · pagado \$${b.paid.toStringAsFixed(0)}'
+                  '${b.lastPayoutAt != null ? ' · último ${b.lastPayoutAt!.day}/${b.lastPayoutAt!.month}' : ''}',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+                trailing: vm.isPaying(b.bandId)
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                      )
+                    : b.hasPending
+                        ? ElevatedButton(
+                            onPressed: () => _pay(b),
+                            child: Text('Pagar \$${b.pending.toStringAsFixed(0)}'),
+                          )
+                        : const Icon(Icons.check_circle, color: AppTheme.primary),
+              ),
+        ],
+      ),
     );
   }
 }

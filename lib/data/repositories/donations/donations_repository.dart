@@ -2,20 +2,18 @@ import 'dart:async';
 
 import 'package:streamtunes/domain/models/donation.dart';
 
+/// Donaciones (solo lectura desde la app).
+///
+/// Todas las donaciones se cobran con el checkout de Mercado Pago en la
+/// cuenta de KIWI. Las registra únicamente el webhook (con service role),
+/// después de verificar el pago contra la API de Mercado Pago: la app nunca
+/// inserta ni aprueba donaciones.
 abstract class DonationsRepository {
+  /// Donaciones aprobadas en vivo (muro de la banda).
   Stream<Donation> get donationCreatedStream;
+
   /// Muro público: solo donaciones aprobadas.
   Future<List<Donation>> getDonationsByBand(String bandId);
 
-  /// Registra una donación declarada por el fan ("Ya transferí").
-  /// Siempre queda `pending`: la aprueba el webhook de Mercado Pago o la banda.
-  /// Es idempotente por `id`.
-  Future<Donation> createDonation(Donation donation);
-
-  /// Donaciones por confirmar de una banda (transferencias al alias).
-  Future<List<Donation>> getPendingDonations(String bandId);
-
-  /// La banda confirma (`approved`) o rechaza (`refunded`) una pendiente.
-  Future<void> reviewDonation(String donationId, {required bool approved});
   void dispose();
 }

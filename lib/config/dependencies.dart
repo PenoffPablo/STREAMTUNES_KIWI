@@ -20,6 +20,9 @@ import 'package:streamtunes/data/repositories/moderation/moderation_repository_s
 import 'package:streamtunes/data/repositories/payments/payments_repository.dart';
 import 'package:streamtunes/data/repositories/payments/payments_repository_fake.dart';
 import 'package:streamtunes/data/repositories/payments/payments_repository_supabase.dart';
+import 'package:streamtunes/data/repositories/payouts/payouts_repository.dart';
+import 'package:streamtunes/data/repositories/payouts/payouts_repository_fake.dart';
+import 'package:streamtunes/data/repositories/payouts/payouts_repository_supabase.dart';
 import 'package:streamtunes/data/repositories/playlists/playlists_repository.dart';
 import 'package:streamtunes/data/repositories/playlists/playlists_repository_fake.dart';
 import 'package:streamtunes/data/repositories/playlists/playlists_repository_supabase.dart';
@@ -67,6 +70,7 @@ class AppDependencies {
     required this.moderationRepository,
     required this.configRepository,
     required this.paymentsRepository,
+    PayoutsRepository? payoutsRepository,
     DeviceTokensRepository? deviceTokensRepository,
     PushNotificationService? pushService,
     DeviceCapabilitiesService? deviceService,
@@ -83,6 +87,7 @@ class AppDependencies {
         deepLinkService = deepLinkService ?? DeepLinkService(),
         launcherService = launcherService ?? ExternalLauncherService(),
         audioAnalyzer = audioAnalyzer ?? AudioAnalyzerService(),
+        payoutsRepository = payoutsRepository ?? FakePayoutsRepository(),
         deviceTokensRepository = deviceTokensRepository ?? FakeDeviceTokensRepository(),
         pushService = pushService ?? NoopPushNotificationService() {
     this.audioPlayerService = audioPlayerService ??
@@ -106,6 +111,7 @@ class AppDependencies {
     PlaylistsRepository? playlistsRepository,
     ModerationRepository? moderationRepository,
     ConfigRepository? configRepository,
+    PayoutsRepository? payoutsRepository,
     DeviceCapabilitiesService? deviceService,
     AudioPlayerService? audioPlayerService,
     PendingFollowService? pendingFollowService,
@@ -120,6 +126,7 @@ class AppDependencies {
       moderationRepository: moderationRepository ?? FakeModerationRepository(),
       configRepository: configRepository ?? FakeConfigRepository(),
       paymentsRepository: FakePaymentsRepository(),
+      payoutsRepository: payoutsRepository,
       deviceService: deviceService,
       audioPlayerService: audioPlayerService,
       pendingFollowService: pendingFollowService,
@@ -139,6 +146,7 @@ class AppDependencies {
       moderationRepository: SupabaseModerationRepository(client),
       configRepository: SupabaseConfigRepository(client),
       paymentsRepository: SupabasePaymentsRepository(client),
+      payoutsRepository: SupabasePayoutsRepository(client),
       deviceTokensRepository: SupabaseDeviceTokensRepository(client),
       pushService: FirebasePushNotificationService(localNotifications: notifications),
       notificationService: notifications,
@@ -154,6 +162,7 @@ class AppDependencies {
   final ModerationRepository moderationRepository;
   final ConfigRepository configRepository;
   final PaymentsRepository paymentsRepository;
+  final PayoutsRepository payoutsRepository;
   final DeviceTokensRepository deviceTokensRepository;
 
   // ---- Capa de datos: servicios ----
@@ -216,7 +225,6 @@ class AppDependencies {
         band: band,
         currentUser: currentUser,
         maxAmount: maxAmount,
-        donationsRepo: donationsRepository,
         paymentsRepo: paymentsRepository,
         launcher: launcherService,
       );
@@ -224,7 +232,7 @@ class AppDependencies {
   BandDashboardViewModel createBandDashboardViewModel(String bandId) => BandDashboardViewModel(
         bandsRepo: bandsRepository,
         songsRepo: songsRepository,
-        donationsRepo: donationsRepository,
+        payoutsRepo: payoutsRepository,
         deviceService: deviceService,
         reportService: reportService,
         bandId: bandId,
@@ -240,6 +248,7 @@ class AppDependencies {
 
   AdminModerationViewModel createAdminModerationViewModel() => AdminModerationViewModel(
         moderationRepo: moderationRepository,
+        payoutsRepo: payoutsRepository,
         configRepo: configRepository,
       );
 
