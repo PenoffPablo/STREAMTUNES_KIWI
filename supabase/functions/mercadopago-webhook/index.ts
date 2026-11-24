@@ -37,6 +37,8 @@ serve(async (req) => {
       }
     }
     if (!paymentId) return json({ message: "No payment id received" });
+    // Se pega en una URL llamada con el token del servidor: solo dígitos.
+    if (!/^\d+$/.test(String(paymentId))) return json({ error: "payment id inválido" }, 400);
 
     // 1. Estado REAL del pago (no se confía en el cuerpo de la notificación).
     const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
@@ -71,11 +73,24 @@ serve(async (req) => {
       status: "approved",
     };
 
-    // 3. ON CONFLICT (id) DO NOTHING -> idempotente.
+    // 3. Upsert por id con los datos REALES del pago:
+    //    * si el fan ya había avisado "Ya transferí", su fila `pending` pasa a
+    //      `approved` con el monto que cobró Mercado Pago (no el declarado);
+    //    * si Mercado Pago reintenta, la fila ya está aprobada y el trigger no
+    //      vuelve a sumar (solo suma al pasar a approved).
     const { error } = await supabase
       .from("donations")
-      .upsert(row, { onConflict: "id", ignoreDuplicates: true });
-    if (error) throw error;
+      .upsert(row, { onConflict: "id" });
+    if (error) {
+      // Rechazo de negocio de la base (banda no aprobada, monto > tope):
+      // reintentar no lo arregla. Se registra y se responde 200 para que
+      // Mercado Pago no reintente en loop.
+      if (error.code === "P0001") {
+        console.error("Pago aprobado que la base rechazó", paymentId, error.message);
+        return json({ status: "rejected", payment_id: paymentId, reason: error.message });
+      }
+      throw error;
+    }
 
     return json({ status: "success", payment_id: paymentId, donation_id: row.id ?? null });
   } catch (err) {

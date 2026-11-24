@@ -277,7 +277,7 @@ void main() {
       socialLinks: const {'alias': 'fuzzers.mp'},
     );
 
-    test('calcula comisión y neto, y confirma la donación en el repositorio', () async {
+    test('"Ya transferí" registra la donación PENDIENTE: no va al muro hasta que la confirmen', () async {
       final donations = FakeDonationsRepository();
       addTearDown(donations.dispose);
       final vm = DonationViewModel(
@@ -293,9 +293,26 @@ void main() {
       expect(vm.netBandAmount, 1880);
       expect(vm.alias, 'fuzzers.mp');
 
-      final live = donations.donationCreatedStream.first;
+      final wallBefore = (await donations.getDonationsByBand(band.id)).length;
+      final emitted = <Donation>[];
+      final sub = donations.donationCreatedStream.listen(emitted.add);
+      addTearDown(sub.cancel);
+
       expect(await vm.confirmDonation(), isTrue);
-      expect((await live).amountArs, 2000);
+      await pumpEventQueue();
+
+      // Lo que declara el fan no suma ni sale en el muro ni dispara el realtime.
+      expect((await donations.getDonationsByBand(band.id)).length, wallBefore);
+      expect(emitted, isEmpty);
+      final pending = await donations.getPendingDonations(band.id);
+      expect(pending.single.id, vm.donationId);
+      expect(pending.single.amountArs, 2000);
+
+      // La banda confirma que la recibió -> recién ahí entra al muro en vivo.
+      await donations.reviewDonation(vm.donationId, approved: true);
+      await pumpEventQueue();
+      expect(emitted.single.id, vm.donationId);
+      expect((await donations.getDonationsByBand(band.id)).length, wallBefore + 1);
       vm.dispose();
     });
 
@@ -325,15 +342,12 @@ void main() {
         paymentsRepo: FakePaymentsRepository(),
         launcher: _FakeLauncher(),
       );
-      final before = (await donations.getDonationsByBand(band.id)).length;
-
-      // Simula: el webhook registró el pago y además el fan tocó "Ya transferí".
+      // El fan toca "Ya transferí" dos veces (o el webhook ya lo registró).
       expect(await vm.confirmDonation(), isTrue);
       expect(await vm.confirmDonation(), isTrue);
 
-      final after = await donations.getDonationsByBand(band.id);
-      expect(after.length, before + 1);
-      expect(after.where((d) => d.id == vm.donationId), hasLength(1));
+      final pending = await donations.getPendingDonations(band.id);
+      expect(pending.where((d) => d.id == vm.donationId), hasLength(1));
       vm.dispose();
     });
 

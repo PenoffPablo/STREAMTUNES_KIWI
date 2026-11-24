@@ -87,8 +87,13 @@ class FirebasePushNotificationService implements PushNotificationService {
   Stream<PushMessage> get openedMessages => _openedController.stream;
 
   @override
-  Stream<String> get onTokenRefresh =>
-      _available ? _messaging.onTokenRefresh : const Stream<String>.empty();
+  Stream<String> get onTokenRefresh async* {
+    // Se suscriben antes de que termine initialize() (que espera el permiso
+    // del usuario). Con un getter síncrono quedaban escuchando un stream vacío
+    // para siempre; acá se espera a la inicialización y recién después se
+    // reenvían los tokens nuevos.
+    if (await initialize()) yield* _messaging.onTokenRefresh;
+  }
 
   @override
   Future<bool> initialize() {

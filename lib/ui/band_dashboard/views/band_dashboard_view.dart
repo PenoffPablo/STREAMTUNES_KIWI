@@ -5,6 +5,7 @@ import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/domain/models/band_event.dart';
 import 'package:streamtunes/domain/models/band_photo.dart';
 import 'package:streamtunes/domain/models/band_stats.dart';
+import 'package:streamtunes/domain/models/donation.dart';
 import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
@@ -222,10 +223,24 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                     const SizedBox(height: 16),
 
                     // 2. Métricas Diarias del Artista (RPC band_aggregated_stats y band_top_fans)
+                    if (_viewModel!.metricsError != null) ...[
+                      // Un fallo de red ya no se ve como "0 reproducciones".
+                      Text(
+                        _viewModel!.metricsError!,
+                        style: const TextStyle(color: AppTheme.accentOrange, fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     _buildDailyMetricsSection(stats),
                     const SizedBox(height: 12),
                     _buildExportCard(_viewModel!),
                     const SizedBox(height: 16),
+
+                    // Transferencias al alias que la banda tiene que confirmar
+                    if (_viewModel!.pendingDonations.isNotEmpty) ...[
+                      _buildPendingDonations(_viewModel!),
+                      const SizedBox(height: 16),
+                    ],
 
                     // 3. Mis Canciones Subidas (Gestión, Edición y Borrado de catálogo)
                     _buildSongsManagementCard(_viewModel!.songs),
@@ -328,6 +343,91 @@ class _BandDashboardViewState extends State<BandDashboardView> {
             qrData,
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontFamily: 'monospace'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reviewDonation(Donation donation, {required bool approved}) async {
+    final ok = await _viewModel?.reviewDonation(donation, approved: approved) ?? false;
+    _showResult(
+      ok,
+      approved
+          ? 'Aporte de \$${donation.amountArs.toInt()} confirmado: ya aparece en el muro.'
+          : 'Aporte marcado como no recibido.',
+      _viewModel?.errorMessage ?? 'No se pudo actualizar el aporte.',
+    );
+  }
+
+  /// Aportes declarados por fans ("Ya transferí") que la banda debe confirmar
+  /// contra su cuenta de Mercado Pago antes de que sumen y salgan en el muro.
+  Widget _buildPendingDonations(BandDashboardViewModel vm) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.accentOrange.withAlpha(120)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.hourglass_top, color: AppTheme.accentOrange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'APORTES POR CONFIRMAR (${vm.pendingDonations.length})',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                    color: AppTheme.accentOrange,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Fans que avisaron una transferencia a tu alias. Confirmá solo si la '
+            'recibiste en tu cuenta de Mercado Pago.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          for (final d in vm.pendingDonations)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                '\$${d.amountArs.toInt()} ARS · ${d.donorName}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              subtitle: d.message == null || d.message!.isEmpty
+                  ? null
+                  : Text(d.message!, maxLines: 2, overflow: TextOverflow.ellipsis),
+              trailing: vm.isReviewing(d.id)
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'No la recibí',
+                          icon: const Icon(Icons.close, color: Colors.redAccent),
+                          onPressed: () => _reviewDonation(d, approved: false),
+                        ),
+                        IconButton(
+                          tooltip: 'La recibí',
+                          icon: const Icon(Icons.check_circle, color: AppTheme.primary),
+                          onPressed: () => _reviewDonation(d, approved: true),
+                        ),
+                      ],
+                    ),
+            ),
         ],
       ),
     );

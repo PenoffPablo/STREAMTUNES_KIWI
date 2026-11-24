@@ -34,11 +34,23 @@ serve(async (req) => {
   }
 
   const bandId = String(body?.band_id ?? "");
-  const bandName = String(body?.band_name ?? "la banda");
   const amount = Number(body?.amount);
-  if (!bandId || !Number.isFinite(amount) || amount <= 0) {
-    return json({ error: "band_id y amount (> 0) son obligatorios" }, 400);
+  if (!UUID_RE.test(bandId) || !Number.isFinite(amount) || amount <= 0) {
+    return json({ error: "band_id (uuid) y amount (> 0) son obligatorios" }, 400);
   }
+
+  // La banda tiene que existir y estar aprobada: si no, Mercado Pago cobraría
+  // un aporte que después la base (validate_donation) no deja registrar.
+  // El nombre sale de la base, no del body (va en el título del cobro).
+  const { data: band } = await supabase
+    .from("bands")
+    .select("name, status")
+    .eq("id", bandId)
+    .maybeSingle();
+  if (!band || band.status !== "approved") {
+    return json({ error: "La banda no existe o no está habilitada para recibir aportes" }, 404);
+  }
+  const bandName = String(band.name);
 
   // id de la donación generado por la app: el webhook lo usa como PK para que
   // un mismo pago no se registre dos veces (ni por reintentos de MP ni por el

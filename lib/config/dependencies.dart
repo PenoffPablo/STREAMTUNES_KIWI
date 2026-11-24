@@ -224,6 +224,7 @@ class AppDependencies {
   BandDashboardViewModel createBandDashboardViewModel(String bandId) => BandDashboardViewModel(
         bandsRepo: bandsRepository,
         songsRepo: songsRepository,
+        donationsRepo: donationsRepository,
         deviceService: deviceService,
         reportService: reportService,
         bandId: bandId,

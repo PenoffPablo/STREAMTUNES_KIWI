@@ -63,7 +63,8 @@ void main() {
         createdAt: DateTime.now(),
       );
 
-      await donationsRepo.createDonation(liveDonation);
+      // Pago aprobado (lo que hace el webhook de Mercado Pago): entra al muro.
+      donationsRepo.addApproved(liveDonation);
       await pumpEventQueue();
 
       // 2. Verificar que el ViewModel capturó la donación del Stream

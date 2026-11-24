@@ -10,6 +10,8 @@ import 'package:streamtunes/domain/models/app_config.dart';
 import 'package:streamtunes/domain/models/app_user.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
+import 'package:streamtunes/utils/async_utils.dart';
+import 'package:streamtunes/utils/ids.dart';
 
 class SessionViewModel extends ViewModel {
   final AuthRepository authRepo;
@@ -70,7 +72,7 @@ class SessionViewModel extends ViewModel {
         unawaited(_syncPushRegistration());
       },
       onError: (Object e) {
-        _errorMessage = 'Error de sesión: $e';
+        _errorMessage = 'Error de sesión: ${describeError(e)}';
         notifyListeners();
       },
     );
@@ -168,15 +170,20 @@ class SessionViewModel extends ViewModel {
       _currentUser = _currentUser!.copyWith(isPublicProfile: value);
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Error actualizando privacidad: $e';
+      _errorMessage = 'Error actualizando privacidad: ${describeError(e)}';
       notifyListeners();
     }
   }
 
   Future<void> switchActiveBand(String bandId) async {
-    final band = await bandsRepo.getBandById(bandId);
-    if (band != null) {
-      _activeBand = band;
+    try {
+      final band = await bandsRepo.getBandById(bandId);
+      if (band != null) {
+        _activeBand = band;
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = 'No se pudo cambiar de banda: ${describeError(e)}';
       notifyListeners();
     }
   }
@@ -194,8 +201,18 @@ class SessionViewModel extends ViewModel {
     final user = _currentUser;
     if (service == null || user == null) return Future.value(0);
     return _syncInFlight ??= service
-        .sync((bandId) => bandsRepo.followBand(bandId, user.id))
+        .sync((target) => _followQueued(target, user.id))
         .whenComplete(() => _syncInFlight = null);
+  }
+
+  /// La cola guarda un id o, si se escaneó sin señal, el slug del QR.
+  /// `band_follows.band_id` es uuid: el slug se resuelve primero. Un error de
+  /// red se propaga (queda en la cola); si la banda ya no existe, devuelve
+  /// `true` para sacarla de la cola en vez de reintentar para siempre.
+  Future<bool> _followQueued(String target, String userId) async {
+    final bandId = isUuid(target) ? target : (await bandsRepo.getBandBySlug(target))?.id;
+    if (bandId == null) return true;
+    return bandsRepo.followBand(bandId, userId);
   }
 
   @override

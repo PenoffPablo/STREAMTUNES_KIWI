@@ -95,7 +95,7 @@ class _DonationModalState extends State<DonationModal> {
         SnackBar(
           backgroundColor: AppTheme.primary,
           content: Text(
-            '¡Aporte de \$$amount ARS registrado con éxito!',
+            '¡Gracias! Avisamos a la banda de tu aporte de \$$amount ARS. Aparece en el muro cuando confirme la transferencia.',
             style: const TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.bold,

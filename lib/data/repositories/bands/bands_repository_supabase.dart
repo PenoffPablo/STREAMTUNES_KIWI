@@ -8,6 +8,7 @@ import 'package:streamtunes/domain/models/band_stats.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository.dart';
 import 'package:streamtunes/utils/async_utils.dart';
+import 'package:streamtunes/utils/ids.dart';
 
 /// Implementación real conectada a Supabase
 class SupabaseBandsRepository implements BandsRepository {
@@ -43,47 +44,44 @@ class SupabaseBandsRepository implements BandsRepository {
   }
 
   @override
+  /// Devuelve `null` solo si la banda NO existe. Los errores de red se
+  /// propagan: así quien llama puede distinguir "no existe" de "sin señal"
+  /// (por ejemplo, para encolar el follow del QR en el sótano).
   Future<Band?> getBandById(String id) async {
-    try {
-      final res =
-          await (_client
-                  .from('bands')
-                  .select('*, band_follows(count)')
-                  .eq('id', id)
-                  .maybeSingle())
-              .withNetworkTimeout();
-      if (res == null) return null;
-      final followsList = res['band_follows'] as List?;
-      final count = followsList?.isNotEmpty == true
-          ? (followsList!.first['count'] as num?)?.toInt() ?? 0
-          : 0;
-      return Band.fromJson(res, followerCount: count);
-    } catch (e) {
-      debugPrint('[SupabaseBandsRepository] Error getBandById: $e');
-      return null;
-    }
+    if (!isUuid(id)) return null; // un slug no puede ser un id
+    final res =
+        await (_client
+                .from('bands')
+                .select('*, band_follows(count)')
+                .eq('id', id)
+                .maybeSingle())
+            .withNetworkTimeout();
+    if (res == null) return null;
+    final followsList = res['band_follows'] as List?;
+    final count = followsList?.isNotEmpty == true
+        ? (followsList!.first['count'] as num?)?.toInt() ?? 0
+        : 0;
+    return Band.fromJson(res, followerCount: count);
   }
 
   @override
+  /// Devuelve `null` solo si la banda NO existe. Los errores de red se
+  /// propagan: así quien llama puede distinguir "no existe" de "sin señal"
+  /// (por ejemplo, para encolar el follow del QR en el sótano).
   Future<Band?> getBandBySlug(String slug) async {
-    try {
-      final res =
-          await (_client
-                  .from('bands')
-                  .select('*, band_follows(count)')
-                  .eq('slug', slug)
-                  .maybeSingle())
-              .withNetworkTimeout();
-      if (res == null) return null;
-      final followsList = res['band_follows'] as List?;
-      final count = followsList?.isNotEmpty == true
-          ? (followsList!.first['count'] as num?)?.toInt() ?? 0
-          : 0;
-      return Band.fromJson(res, followerCount: count);
-    } catch (e) {
-      debugPrint('[SupabaseBandsRepository] Error getBandBySlug: $e');
-      return null;
-    }
+    final res =
+        await (_client
+                .from('bands')
+                .select('*, band_follows(count)')
+                .eq('slug', slug)
+                .maybeSingle())
+            .withNetworkTimeout();
+    if (res == null) return null;
+    final followsList = res['band_follows'] as List?;
+    final count = followsList?.isNotEmpty == true
+        ? (followsList!.first['count'] as num?)?.toInt() ?? 0
+        : 0;
+    return Band.fromJson(res, followerCount: count);
   }
 
   @override
@@ -222,21 +220,17 @@ class SupabaseBandsRepository implements BandsRepository {
   Future<BandPhoto> addBandPhoto(BandPhoto photo) async {
     String photoUrl = photo.photoUrl;
 
-    // Si es un archivo local del dispositivo, subirlo a Supabase Storage bucket 'photos'
+    // Archivo local -> bucket 'photos'. Si la subida falla se propaga el error:
+    // NO se guarda una ruta del celular que nadie más puede ver.
     if (!photoUrl.startsWith('http')) {
-      try {
-        final file = File(photoUrl);
-        if (await file.exists()) {
-          final storagePath =
-              '${photo.bandId}/${DateTime.now().millisecondsSinceEpoch}_photo.jpg';
-          await _client.storage.from('photos').upload(storagePath, file);
-          photoUrl = _client.storage.from('photos').getPublicUrl(storagePath);
-        }
-      } catch (e) {
-        debugPrint(
-          '[SupabaseBandsRepository] Error subiendo foto a Storage: $e',
-        );
+      final file = File(photoUrl);
+      if (!await file.exists()) {
+        throw const AppException('No se encontró la foto seleccionada.');
       }
+      final storagePath =
+          '${photo.bandId}/${DateTime.now().millisecondsSinceEpoch}_photo.jpg';
+      await _client.storage.from('photos').upload(storagePath, file);
+      photoUrl = _client.storage.from('photos').getPublicUrl(storagePath);
     }
 
     final payload = photo.copyWith(photoUrl: photoUrl).toJson()..remove('id');
@@ -246,27 +240,15 @@ class SupabaseBandsRepository implements BandsRepository {
     return BandPhoto.fromJson(res);
   }
 
+  /// Si falla, propaga el error. Antes devolvía ceros y el panel los
+  /// guardaba en caché por 24 h como si fueran datos reales.
   @override
   Future<BandAggregatedStats> getBandAggregatedStats(String bandId) async {
-    // Invocación a RPC nativo de PostgreSQL
-    try {
-      final res = await (_client.rpc(
-        'band_aggregated_stats',
-        params: {'p_band': bandId},
-      )).withNetworkTimeout();
-      return BandAggregatedStats.fromJson(res as Map<String, dynamic>);
-    } catch (e) {
-      debugPrint(
-        '[SupabaseBandsRepository] Advertencia band_aggregated_stats RPC: $e',
-      );
-      return BandAggregatedStats(
-        bandId: bandId,
-        totalPlays: 0,
-        totalMinutes: 0,
-        last7DaysPlays: 0,
-        topSongs: const [],
-      );
-    }
+    final res = await (_client.rpc(
+      'band_aggregated_stats',
+      params: {'p_band': bandId},
+    )).withNetworkTimeout();
+    return BandAggregatedStats.fromJson(res as Map<String, dynamic>);
   }
 
   @override
@@ -296,7 +278,7 @@ class SupabaseBandsRepository implements BandsRepository {
         debugPrint(
           '[SupabaseBandsRepository] Advertencia getBandTopFans RPC: $e',
         );
-        return [];
+        rethrow; // el ViewModel decide cómo degradar (no se cachea un fallo)
       }
     }
   }

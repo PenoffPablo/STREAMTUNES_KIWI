@@ -1,8 +1,10 @@
 // Edge Function: envía notificaciones push con Firebase Cloud Messaging (API HTTP v1).
 //
 // Se dispara con Database Webhooks de Supabase (Dashboard > Database > Webhooks):
-//   * INSERT en public.songs      -> avisa a los SEGUIDORES de la banda ("nuevo tema")
-//   * INSERT en public.donations  -> avisa a los MIEMBROS de la banda ("recibiste un aporte")
+//   * INSERT en public.songs              -> SEGUIDORES de la banda ("nuevo tema")
+//   * INSERT en public.donations pending  -> MIEMBROS ("un fan avisó un aporte: confirmalo")
+//   * INSERT/UPDATE a approved            -> MIEMBROS ("recibiste un aporte"), una sola vez
+//     (el webhook de `donations` tiene que tener marcados INSERT **y** UPDATE)
 //
 // Secrets necesarios (supabase secrets set ...):
 //   FIREBASE_SERVICE_ACCOUNT  JSON completo de la cuenta de servicio de Firebase
@@ -83,11 +85,17 @@ async function bandName(bandId: string): Promise<string> {
   return (data?.name as string) ?? "Una banda que seguís";
 }
 
-async function buildPush(table: string, record: Record<string, unknown>): Promise<{ push: Push; userIds: string[] } | null> {
+async function buildPush(
+  type: string,
+  table: string,
+  record: Record<string, unknown>,
+  oldRecord: Record<string, unknown> | null,
+): Promise<{ push: Push; userIds: string[] } | null> {
   const bandId = String(record.band_id ?? "");
   if (!bandId) return null;
 
   if (table === "songs") {
+    if (type !== "INSERT") return null;
     if (record.hidden === true) return null;
     const { data } = await supabase.from("band_follows").select("user_id").eq("band_id", bandId);
     return {
@@ -97,13 +105,36 @@ async function buildPush(table: string, record: Record<string, unknown>): Promis
   }
 
   if (table === "donations") {
-    if (record.status && record.status !== "approved") return null;
-    const { data } = await supabase.from("band_members").select("user_id").eq("band_id", bandId);
-    // El esquema histórico usa `amount_ars`; la base actual, `amount`.
-    const amount = Number(record.amount ?? record.amount_ars ?? 0);
+    const amount = Number(record.amount ?? 0).toFixed(0);
+    const members = async () => {
+      const { data } = await supabase.from("band_members").select("user_id").eq("band_id", bandId);
+      return (data ?? []).map((r) => r.user_id as string);
+    };
+
+    // Un fan avisó una transferencia al alias: la banda tiene que confirmarla.
+    if (type === "INSERT" && record.status === "pending") {
+      return {
+        userIds: await members(),
+        push: {
+          title: "⏳ Un fan avisó un aporte",
+          body: `Dice que transfirió $${amount} ARS. Confirmalo en tu panel si lo recibiste.`,
+          bandId,
+        },
+      };
+    }
+
+    // Aporte aprobado: llega como INSERT (pago por checkout sin aviso previo)
+    // o como UPDATE pending -> approved (lo confirmó la banda o el webhook).
+    // En UPDATE se exige que ANTES no estuviera aprobado: los reintentos del
+    // webhook (approved -> approved) no vuelven a notificar.
+    const becameApproved =
+      record.status === "approved" &&
+      (type === "INSERT" || (type === "UPDATE" && oldRecord?.status !== "approved"));
+    if (!becameApproved) return null;
+
     return {
-      userIds: (data ?? []).map((r) => r.user_id as string),
-      push: { title: "💸 ¡Recibiste un aporte!", body: `Un fan aportó $${amount.toFixed(0)} ARS a la banda.`, bandId },
+      userIds: await members(),
+      push: { title: "💸 ¡Recibiste un aporte!", body: `Un fan aportó $${amount} ARS a la banda.`, bandId },
     };
   }
   return null;
@@ -142,9 +173,12 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    if (payload?.type !== "INSERT" || !payload?.record) return json({ skipped: "not an insert" });
+    const type = String(payload?.type ?? "");
+    if (!["INSERT", "UPDATE"].includes(type) || !payload?.record) {
+      return json({ skipped: `evento ${type || "desconocido"}` });
+    }
 
-    const target = await buildPush(String(payload.table), payload.record);
+    const target = await buildPush(type, String(payload.table), payload.record, payload.old_record ?? null);
     if (!target) return json({ skipped: "nothing to notify" });
 
     const tokens = await tokensForUsers(target.userIds);

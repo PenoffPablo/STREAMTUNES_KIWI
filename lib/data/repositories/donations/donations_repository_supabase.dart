@@ -31,6 +31,21 @@ class SupabaseDonationsRepository implements DonationsRepository {
 
   void _subscribeRealtime() {
     if (_channel != null) return;
+
+    // Una donación entra al muro cuando queda APROBADA: puede ser un INSERT
+    // (pago ya aprobado) o un UPDATE (el webhook o la banda la confirman).
+    // El muro descarta repetidos por id.
+    void onChange(PostgresChangePayload payload) {
+      try {
+        final donation = Donation.fromJson(payload.newRecord);
+        if (donation.isApproved && !_streamController.isClosed) {
+          _streamController.add(donation);
+        }
+      } catch (e) {
+        debugPrint('[SupabaseDonationsRepository] Error parseando donación realtime: $e');
+      }
+    }
+
     try {
       _channel = _client
           .channel('public:donations')
@@ -38,25 +53,17 @@ class SupabaseDonationsRepository implements DonationsRepository {
             event: PostgresChangeEvent.insert,
             schema: 'public',
             table: 'donations',
-            callback: (payload) {
-              try {
-                final newRecord = payload.newRecord;
-                final donation = Donation.fromJson(newRecord);
-                if (donation.isApproved) {
-                  _streamController.add(donation);
-                }
-              } catch (e) {
-                debugPrint(
-                  '[SupabaseDonationsRepository] Error parseando donación realtime: $e',
-                );
-              }
-            },
+            callback: onChange,
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'donations',
+            callback: onChange,
           )
           .subscribe();
     } catch (e) {
-      debugPrint(
-        '[SupabaseDonationsRepository] Error suscribiendo a realtime: $e',
-      );
+      debugPrint('[SupabaseDonationsRepository] Error suscribiendo a realtime: $e');
     }
   }
 
@@ -78,38 +85,65 @@ class SupabaseDonationsRepository implements DonationsRepository {
     return (res as List).map((json) => Donation.fromJson(json)).toList();
   }
 
-  @override
-  /// Registra la donación de forma IDEMPOTENTE.
+  /// Registra la donación declarada por el fan, de forma IDEMPOTENTE.
   ///
-  /// * `donor_id` es el usuario autenticado o `null` (la columna admite nulos).
-  ///   Antes, sin sesión, se asignaba la donación al primer perfil de la tabla:
-  ///   es decir, a OTRA persona.
-  /// * El `id` lo genera la app y viaja también en el `external_reference` de
-  ///   Mercado Pago. Si el webhook ya registró este pago, el insert se ignora
-  ///   (ON CONFLICT DO NOTHING) y se devuelve la fila existente: no hay duplicados.
+  /// * Siempre `pending`: el cliente no puede aprobarse a sí mismo (lo exige
+  ///   también la política RLS). La aprueba el webhook de Mercado Pago con el
+  ///   monto real, o la banda desde su panel si fue una transferencia al alias.
+  /// * `donor_id` es el usuario autenticado o `null`.
+  /// * El `id` lo genera la app y viaja en el pago: ON CONFLICT DO NOTHING.
+  /// * Sin `.select()`: una donación pendiente anónima no es visible por RLS,
+  ///   y pedirla de vuelta (RETURNING) haría fallar el insert.
   @override
   Future<Donation> createDonation(Donation donation) async {
-    final payload = donation
-        .copyWith(status: 'approved')
-        .toJson()
-      ..['donor_id'] = _client.auth.currentUser?.id;
+    final donorId = _client.auth.currentUser?.id;
+    final pending = Donation(
+      id: donation.id,
+      bandId: donation.bandId,
+      donorUserId: donorId,
+      donorName: donation.donorName,
+      amountArs: donation.amountArs,
+      message: donation.message,
+      isAnonymous: donation.isAnonymous,
+      status: 'pending',
+      createdAt: DateTime.now(),
+    );
+    await (_client
+            .from('donations')
+            .upsert(pending.toJson(), onConflict: 'id', ignoreDuplicates: true))
+        .withNetworkTimeout();
+    return pending;
+  }
 
-    final inserted =
+  @override
+  Future<List<Donation>> getPendingDonations(String bandId) async {
+    final res =
         await (_client
                 .from('donations')
-                .upsert(payload, onConflict: 'id', ignoreDuplicates: true)
-                .select())
+                .select('*, donor:profiles!donations_donor_id_fkey(display_name)')
+                .eq('band_id', bandId)
+                .eq('status', 'pending')
+                .order('created_at', ascending: false))
             .withNetworkTimeout();
+    return (res as List).map((json) => Donation.fromJson(json)).toList();
+  }
 
-    final rows = inserted as List;
-    final created = rows.isNotEmpty
-        ? Donation.fromJson(rows.first as Map<String, dynamic>)
-        : Donation.fromJson(
-            await (_client.from('donations').select().eq('id', donation.id).single())
-                .withNetworkTimeout(),
-          );
-    if (rows.isNotEmpty && _streamController.hasListener) _streamController.add(created);
-    return created;
+  @override
+  Future<void> reviewDonation(String donationId, {required bool approved}) async {
+    // `.select('id')` devuelve las filas realmente actualizadas: si otro
+    // miembro o el webhook ya la resolvió, no hay filas y se informa, en vez
+    // de mostrar "confirmado" sin haber cambiado nada.
+    final updated =
+        await (_client
+                .from('donations')
+                .update({'status': approved ? 'approved' : 'refunded'})
+                .eq('id', donationId)
+                .eq('status', 'pending')
+                .select('id'))
+            .withNetworkTimeout();
+    if ((updated as List).isEmpty) {
+      throw const AppException('Este aporte ya fue revisado.');
+    }
   }
 
   @override

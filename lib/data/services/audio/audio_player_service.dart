@@ -18,7 +18,6 @@ typedef PlayEventCallback = Future<void> Function(
 
 class AudioPlayerService {
   final AudioPlayer _player;
-  AudioPlayer? _preloader; // Para la precarga en segundo plano ("El túnel")
   final PlayEventCallback? onPlayLogged;
 
   Song? _currentSong;
@@ -40,6 +39,7 @@ class AudioPlayerService {
   StreamSubscription? _durationSub;
   StreamSubscription? _bufferedPositionSub;
   StreamSubscription? _interruptionSub;
+  StreamSubscription? _indexSub;
 
   AudioPlayerService({
     AudioPlayer? player,
@@ -106,8 +106,9 @@ class AudioPlayerService {
           state.processingState == ProcessingState.buffering) {
         _playbackStateController.add(CustomPlaybackState.buffering);
       } else if (state.processingState == ProcessingState.completed) {
+        // Con la cola cargada en el reproductor, `completed` llega recién al
+        // terminar el ÚLTIMO tema: el paso entre temas lo hace el reproductor.
         _playbackStateController.add(CustomPlaybackState.completed);
-        skipToNext();
       } else if (state.playing) {
         _playbackStateController.add(CustomPlaybackState.playing);
       } else {
@@ -131,6 +132,12 @@ class AudioPlayerService {
       }
     });
 
+    // Cuando el reproductor avanza solo al tema siguiente de la cola.
+    _indexSub = _player.currentIndexStream.listen((index) {
+      if (_isDisposed || index == null) return;
+      _setCurrent(index);
+    });
+
     _durationSub = _player.durationStream.listen((dur) {
       if (_isDisposed || _durationController.isClosed) return;
 
@@ -146,29 +153,40 @@ class AudioPlayerService {
     });
   }
 
-  /// Carga y reproduce una canción. Configura la cola y activa "El túnel".
+  /// Carga la cola completa en el reproductor y empieza por [song].
+  ///
+  /// "El túnel": la cola entera se entrega al MISMO `AudioPlayer` con
+  /// `setAudioSources`. El reproductor nativo (ExoPlayer / AVQueuePlayer)
+  /// precarga el tema siguiente mientras suena el actual, sin cortes.
+  /// Antes se creaba un segundo `AudioPlayer` para precargar, pero
+  /// just_audio_background admite una sola instancia: fallaba siempre en el
+  /// celular y el error quedaba escondido.
   Future<void> playSong(Song song, {List<Song>? queue}) async {
     try {
-      _currentSong = song;
-      if (!_isDisposed && !_currentSongController.isClosed) {
-        _currentSongController.add(_currentSong);
+      _queue = (queue != null && queue.isNotEmpty) ? List.of(queue) : [song];
+      var index = _queue.indexWhere((s) => s.id == song.id);
+      if (index == -1) {
+        _queue.insert(0, song);
+        index = 0;
       }
+      // Volver a reproducir el MISMO tema también cuenta como escucha nueva
+      // (_setCurrent no reinicia el registro si la canción no cambió).
       _hasLoggedCurrentPlay = false;
+      _setCurrent(index);
 
-      if (queue != null && queue.isNotEmpty) {
-        _queue = List.from(queue);
-        _currentIndex = _queue.indexWhere((s) => s.id == song.id);
-        if (_currentIndex == -1) {
-          _queue.insert(0, song);
-          _currentIndex = 0;
-        }
-      } else {
-        _queue = [song];
-        _currentIndex = 0;
-      }
+      await _player.setAudioSources(
+        [for (final s in _queue) _sourceFor(s)],
+        initialIndex: index,
+      );
+      await _player.play();
+    } catch (e) {
+      debugPrint('[AudioPlayerService] Error al reproducir audio: $e');
+    }
+  }
 
-      // Soporte de segundo plano con MediaItem para notificación multimedia
-      final audioSource = AudioSource.uri(
+  /// Fuente con `MediaItem`: título, banda y portada para la notificación
+  /// multimedia y los controles de la pantalla bloqueada.
+  AudioSource _sourceFor(Song song) => AudioSource.uri(
         Uri.parse(song.audioPath),
         tag: MediaItem(
           id: song.id,
@@ -180,29 +198,17 @@ class AudioPlayerService {
         ),
       );
 
-      await _player.setAudioSource(audioSource);
-      await _player.play();
-
-      // "El Túnel": Precarga automática de la siguiente canción
-      _preloadNextSong();
-    } catch (e) {
-      debugPrint('[AudioPlayerService] Error al reproducir audio: $e');
-    }
-  }
-
-  /// "El túnel": Precarga el tema i+1 en buffer en segundo plano
-  void _preloadNextSong() {
-    if (_queue.isEmpty || _currentIndex < 0) return;
-    final nextIndex = _currentIndex + 1;
-    if (nextIndex < _queue.length) {
-      final nextSong = _queue[nextIndex];
-      debugPrint('[El Túnel] Precargando siguiente pista en buffer: "${nextSong.title}"');
-      _preloader?.dispose();
-      _preloader = AudioPlayer();
-      _preloader!.setUrl(nextSong.audioPath).catchError((e) {
-        debugPrint('[El Túnel] Precarga tolerante a fallos: $e');
-        return null;
-      });
+  /// Actualiza la canción actual (al empezar o cuando el reproductor avanza
+  /// solo al tema siguiente de la cola) y reinicia el registro de escucha.
+  void _setCurrent(int index) {
+    if (index < 0 || index >= _queue.length) return;
+    final song = _queue[index];
+    if (_currentIndex == index && _currentSong?.id == song.id) return;
+    _currentIndex = index;
+    _currentSong = song;
+    _hasLoggedCurrentPlay = false;
+    if (!_isDisposed && !_currentSongController.isClosed) {
+      _currentSongController.add(song);
     }
   }
 
@@ -226,11 +232,11 @@ class AudioPlayerService {
     await _player.seek(position);
   }
 
+  /// Pasa al tema siguiente de la cola (ya precargado por el reproductor).
   Future<void> skipToNext() async {
     if (_queue.isEmpty) return;
-    if (_currentIndex + 1 < _queue.length) {
-      _currentIndex++;
-      await playSong(_queue[_currentIndex], queue: _queue);
+    if (_player.hasNext) {
+      await _player.seekToNext();
     } else {
       await _player.stop();
       if (!_isDisposed && !_playbackStateController.isClosed) {
@@ -241,9 +247,8 @@ class AudioPlayerService {
 
   Future<void> skipToPrevious() async {
     if (_queue.isEmpty) return;
-    if (_currentIndex > 0) {
-      _currentIndex--;
-      await playSong(_queue[_currentIndex], queue: _queue);
+    if (_player.hasPrevious) {
+      await _player.seekToPrevious();
     } else {
       await seek(Duration.zero);
     }
@@ -256,6 +261,7 @@ class AudioPlayerService {
     _durationSub?.cancel();
     _bufferedPositionSub?.cancel();
     _interruptionSub?.cancel();
+    _indexSub?.cancel();
 
     _currentSongController.close();
     _playbackStateController.close();
@@ -263,7 +269,6 @@ class AudioPlayerService {
     _durationController.close();
     _bufferedPositionController.close();
 
-    _preloader?.dispose();
     _player.dispose();
   }
 }

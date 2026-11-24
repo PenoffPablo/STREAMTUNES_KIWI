@@ -53,7 +53,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return pl;
     } catch (e) {
-      _errorMessage = 'Error creando playlist: $e';
+      _errorMessage = 'Error creando playlist: ${describeError(e)}';
       notifyListeners();
       return null;
     }
@@ -75,7 +75,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error sumando canción a playlist: $e';
+      _errorMessage = 'Error sumando canción a playlist: ${describeError(e)}';
       notifyListeners();
       return false;
     }
@@ -94,7 +94,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error quitando canción de playlist: $e';
+      _errorMessage = 'Error quitando canción de playlist: ${describeError(e)}';
       notifyListeners();
       return false;
     }
@@ -109,7 +109,7 @@ class LibraryViewModel extends ViewModel {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Error eliminando playlist: $e';
+      _errorMessage = 'Error eliminando playlist: ${describeError(e)}';
       notifyListeners();
       return false;
     }

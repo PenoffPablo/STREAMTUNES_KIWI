@@ -34,7 +34,14 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
     final user = SessionScope.of(context).currentUser;
     if (user != null && !user.isAnonymous && user.id != _lastLoadedUserId) {
       _lastLoadedUserId = user.id;
-      LibraryScope.read(context).loadLibrary(user.id);
+      // didChangeDependencies corre DURANTE el build, y loadLibrary hace
+      // notifyListeners() sobre el LibraryViewModel global, que otros widgets
+      // ya escuchan ("setState() called during build"). Se difiere al final
+      // del frame.
+      final library = LibraryScope.read(context);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) library.loadLibrary(user.id);
+      });
     }
   }
 

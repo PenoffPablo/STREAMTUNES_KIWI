@@ -117,7 +117,11 @@ El menú inferior y las secciones disponibles se adaptan estrictamente al contex
 
 ### Aportes y Pasarela de Pago (Mercado Pago)
 * La preferencia de pago se crea en la Edge Function `mercadopago-create-preference`. El **Access Token vive solo en el servidor** (secret), nunca en la app.
-* Cada intento de donación tiene un id (uuid) generado por la app, que viaja a Mercado Pago. El webhook lo usa como clave de la fila (`ON CONFLICT DO NOTHING`): ni los reintentos de Mercado Pago ni el botón "Ya transferí" generan duplicados.
+* Cada intento de donación tiene un id (uuid) generado por la app, que viaja a Mercado Pago. Ni los reintentos de Mercado Pago ni el botón "Ya transferí" generan duplicados.
+* **El fan no puede aprobarse a sí mismo.** "Ya transferí" registra la donación como **pendiente**: no suma al total, no aparece en el muro y le avisa a la banda por push. Después:
+  * si el fan pagó con el **checkout**, el webhook la aprueba con el **monto real** que cobró Mercado Pago;
+  * si **transfirió al alias**, la banda la confirma o rechaza en **"Aportes por confirmar"** de su panel.
+* Al aprobarse, el trigger de la base suma al total y el aporte aparece en el muro en tiempo real.
 * El donante se toma de la sesión (JWT), nunca del cliente. Sin sesión, la donación queda sin donante.
 * Si la banda no cargó un alias propio, solo se ofrece el checkout: no hay alias por defecto.
 * Desglose transparente de la comisión estimada frente al monto neto para el artista.
@@ -267,6 +271,12 @@ La migración `20261116030000_function_hardening.sql` hace tres cosas:
 * Quita el permiso de ejecución por API a las funciones de trigger y de mantenimiento.
 * Limita `band_aggregated_stats` a los miembros de la banda.
 * Corrige `band_top_fans` para que liste solo oyentes reales y no exponga el id de los perfiles privados.
+
+La migración `20261124000000_donations_pending.sql` hace dos cosas:
+* La app solo puede insertar donaciones `pending`. Los miembros de la banda pueden cambiar **solo** la columna `status` de sus pendientes, a aprobada o rechazada.
+* El total de la banda se ajusta si el webhook corrige el monto de una donación ya aprobada.
+
+**Limitación conocida:** con la clave pública se pueden crear pendientes sin límite. No afectan el total ni el muro, y la banda las puede rechazar.
 
 ### Secretos de Mercado Pago
 ```bash

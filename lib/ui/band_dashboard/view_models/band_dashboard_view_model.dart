@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:streamtunes/data/repositories/bands/bands_repository.dart';
+import 'package:streamtunes/data/repositories/donations/donations_repository.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository.dart';
 import 'package:streamtunes/data/services/device/device_capabilities_service.dart';
 import 'package:streamtunes/data/services/reports/band_report_service.dart';
@@ -9,6 +10,7 @@ import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/domain/models/band_event.dart';
 import 'package:streamtunes/domain/models/band_photo.dart';
 import 'package:streamtunes/domain/models/band_stats.dart';
+import 'package:streamtunes/domain/models/donation.dart';
 import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
 import 'package:streamtunes/utils/async_utils.dart';
@@ -16,6 +18,7 @@ import 'package:streamtunes/utils/async_utils.dart';
 class BandDashboardViewModel extends ViewModel {
   final BandsRepository bandsRepo;
   final SongsRepository songsRepo;
+  final DonationsRepository? donationsRepo;
   final DeviceCapabilitiesService? deviceService;
   final BandReportService reportService;
   final String bandId;
@@ -27,6 +30,9 @@ class BandDashboardViewModel extends ViewModel {
   List<BandEvent> _events = [];
   List<BandPhoto> _photos = [];
   List<Song> _songs = [];
+  List<Donation> _pendingDonations = [];
+  final Set<String> _reviewing = {};
+  String? _metricsError;
   int _songCount = 0;
   bool _isLoading = false;
   bool _isLoadingMetrics = false;
@@ -44,6 +50,7 @@ class BandDashboardViewModel extends ViewModel {
     required this.bandsRepo,
     required this.songsRepo,
     required this.bandId,
+    this.donationsRepo,
     this.deviceService,
     this.reportService = const BandReportService(),
     this.prefs,
@@ -55,6 +62,13 @@ class BandDashboardViewModel extends ViewModel {
   List<BandEvent> get events => List.unmodifiable(_events);
   List<BandPhoto> get photos => List.unmodifiable(_photos);
   List<Song> get songs => List.unmodifiable(_songs);
+
+  /// Transferencias al alias que la banda todavía no confirmó.
+  List<Donation> get pendingDonations => List.unmodifiable(_pendingDonations);
+  bool isReviewing(String donationId) => _reviewing.contains(donationId);
+
+  /// Error de métricas (no bloquea el resto del panel).
+  String? get metricsError => _metricsError;
   int get songCount => _songCount;
   bool get isLoading => _isLoading;
   bool get isLoadingMetrics => _isLoadingMetrics;
@@ -82,13 +96,15 @@ class BandDashboardViewModel extends ViewModel {
 
     try {
       final p = await _getPrefs();
-      // Datos livianos y métricas en paralelo, con tipos preservados por el record.
-      final (band, events, photos, songs, _) = await (
+      // Las métricas y los aportes pendientes son secundarios: si fallan, el
+      // resto del panel carga igual (cada uno guarda su propio error).
+      final (band, events, photos, songs, _, pending) = await (
         bandsRepo.getBandById(bandId),
         bandsRepo.getBandEvents(bandId),
         bandsRepo.getBandPhotos(bandId),
         songsRepo.getSongsByBand(bandId),
-        _loadMetrics(p, forceRefresh: false),
+        _loadMetricsSafely(p),
+        _loadPendingSafely(),
       ).wait.withNetworkTimeout();
 
       _band = band;
@@ -96,6 +112,7 @@ class BandDashboardViewModel extends ViewModel {
       _photos = List.of(photos);
       _songs = List.of(songs);
       _songCount = songs.length;
+      _pendingDonations = pending;
       _canExportToday = !_isWithin24Hours(p.getString(_exportKey));
     } catch (e) {
       _errorMessage = 'Error cargando panel de banda: ${describeError(e)}';
@@ -108,14 +125,63 @@ class BandDashboardViewModel extends ViewModel {
   /// Actualiza solo las métricas diarias (botón "actualizar").
   Future<void> loadDailyMetrics({bool forceRefresh = false}) async {
     _isLoadingMetrics = true;
-    _errorMessage = null;
+    _metricsError = null;
     notifyListeners();
     try {
       await _loadMetrics(await _getPrefs(), forceRefresh: forceRefresh).withNetworkTimeout();
     } catch (e) {
-      _errorMessage = 'Error cargando métricas diarias: ${describeError(e)}';
+      _metricsError = 'Error cargando métricas diarias: ${describeError(e)}';
     } finally {
       _isLoadingMetrics = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadMetricsSafely(SharedPreferences p) async {
+    _metricsError = null;
+    try {
+      await _loadMetrics(p, forceRefresh: false);
+    } catch (e) {
+      _metricsError = 'No se pudieron cargar las métricas: ${describeError(e)}';
+    }
+  }
+
+  Future<List<Donation>> _loadPendingSafely() async {
+    final repo = donationsRepo;
+    if (repo == null) return const [];
+    try {
+      return await repo.getPendingDonations(bandId);
+    } catch (e) {
+      debugPrint('[BandDashboardViewModel] Aportes pendientes no disponibles: $e');
+      return const [];
+    }
+  }
+
+  /// La banda confirma que recibió la transferencia (o la rechaza).
+  /// Al confirmarla, el trigger de la base suma el monto al total y el aporte
+  /// aparece en el muro en vivo.
+  Future<bool> reviewDonation(Donation donation, {required bool approved}) async {
+    final repo = donationsRepo;
+    if (repo == null || _reviewing.contains(donation.id)) return false;
+    _reviewing.add(donation.id);
+    notifyListeners();
+    try {
+      await repo.reviewDonation(donation.id, approved: approved);
+      _pendingDonations = [
+        for (final d in _pendingDonations)
+          if (d.id != donation.id) d,
+      ];
+      if (approved && _band != null) {
+        _band = _band!.copyWith(
+          donationsCollected: _band!.donationsCollected + donation.amountArs,
+        );
+      }
+      return true;
+    } catch (e) {
+      _errorMessage = 'No se pudo actualizar el aporte: ${describeError(e)}';
+      return false;
+    } finally {
+      _reviewing.remove(donation.id);
       notifyListeners();
     }
   }

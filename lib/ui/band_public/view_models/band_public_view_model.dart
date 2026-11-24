@@ -104,7 +104,8 @@ class BandPublicViewModel extends ViewModel {
         songsRepo.getSongsByBand(bandId),
         bandsRepo.getBandEvents(bandId),
         bandsRepo.getBandPhotos(bandId),
-        bandsRepo.getBandTopFans(bandId),
+        // El ranking es secundario: si falla, el perfil se muestra igual sin él.
+        bandsRepo.getBandTopFans(bandId).catchError((Object _) => <TopFanStat>[]),
         donationsRepo.getDonationsByBand(bandId),
         currentUserId != null
             ? bandsRepo.isFollowing(bandId, currentUserId)

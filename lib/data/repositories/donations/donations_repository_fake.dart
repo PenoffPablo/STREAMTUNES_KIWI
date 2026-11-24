@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:streamtunes/domain/models/donation.dart';
 import 'package:streamtunes/data/repositories/donations/donations_repository.dart';
+import 'package:streamtunes/utils/async_utils.dart';
 
 /// Implementación en memoria determinista (Modo Dual / Offline / Pruebas)
 class FakeDonationsRepository implements DonationsRepository {
@@ -53,17 +54,38 @@ class FakeDonationsRepository implements DonationsRepository {
     final existing = _donations.where((d) => d.id == donation.id && d.id.isNotEmpty);
     if (existing.isNotEmpty) return existing.first;
 
+    // Igual que la base: lo que declara el fan queda pendiente.
     final newDonation = donation.copyWith(
       id: donation.id.isNotEmpty
           ? donation.id
           : 'don-${DateTime.now().millisecondsSinceEpoch}',
-      status: 'approved',
+      status: 'pending',
       createdAt: DateTime.now(),
     );
 
     _donations.insert(0, newDonation);
-    _streamController.add(newDonation);
     return newDonation;
+  }
+
+  /// Solo para tests y datos de demo: simula un pago ya aprobado (webhook).
+  void addApproved(Donation donation) {
+    final approved = donation.copyWith(status: 'approved');
+    _donations.insert(0, approved);
+    _streamController.add(approved);
+  }
+
+  @override
+  Future<List<Donation>> getPendingDonations(String bandId) async {
+    return _donations.where((d) => d.bandId == bandId && d.status == 'pending').toList();
+  }
+
+  @override
+  Future<void> reviewDonation(String donationId, {required bool approved}) async {
+    final idx = _donations.indexWhere((d) => d.id == donationId && d.status == 'pending');
+    if (idx == -1) throw const AppException('Este aporte ya fue revisado.');
+    final updated = _donations[idx].copyWith(status: approved ? 'approved' : 'refunded');
+    _donations[idx] = updated;
+    if (approved) _streamController.add(updated); // aparece en el muro en vivo
   }
 
   @override

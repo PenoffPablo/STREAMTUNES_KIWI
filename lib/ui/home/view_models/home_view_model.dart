@@ -9,6 +9,7 @@ import 'package:streamtunes/data/services/device/device_capabilities_service.dar
 import 'package:streamtunes/data/services/storage/pending_follow_service.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
 import 'package:streamtunes/utils/async_utils.dart';
+import 'package:streamtunes/utils/ids.dart';
 import 'package:streamtunes/utils/stream_transformers.dart';
 
 class QrScanResult {
@@ -176,25 +177,29 @@ class HomeViewModel extends ViewModel {
     }
     target = target.replaceAll(RegExp(r'/+$'), '').trim();
 
-    // Caso SÓTANO UNDERGROUND (Sin conexión a internet)
+    // Caso SÓTANO UNDERGROUND forzado (tests / demo): se encola y, si la banda
+    // está disponible localmente, se abre su perfil. En un corte REAL no se
+    // reintenta la búsqueda: sería otro timeout de red esperando en vano.
     if (simulateOffline) {
-      await pendingFollowService.queueFollow(target);
-      Band? cachedBand = await bandsRepo.getBandById(target);
-      cachedBand ??= await bandsRepo.getBandBySlug(target);
+      Band? cached;
+      try {
+        cached = await _findBand(target);
+      } catch (_) {
+        cached = null;
+      }
+      return _queueOffline(target, band: cached);
+    }
 
-      return QrScanResult(
-        band: cachedBand,
-        message: 'Sin señal en el sótano: quedaste anotado y te sumamos como seguidor apenas recuperes conexión.',
-        isOffline: true,
-        isSuccess: true,
-      );
+    Band? band;
+    try {
+      // 1. Obtener la banda. Un error acá es de red (el repositorio devuelve
+      //    null solo cuando la banda no existe): se encola para más tarde.
+      band = await _findBand(target);
+    } catch (_) {
+      return _queueOffline(target);
     }
 
     try {
-      // 1. Obtener banda por ID o slug
-      Band? band = await bandsRepo.getBandById(target);
-      band ??= await bandsRepo.getBandBySlug(target);
-
       if (band == null) {
         return const QrScanResult(
           message: 'Banda no encontrada en el colectivo StreamTunes.',
@@ -213,31 +218,42 @@ class HomeViewModel extends ViewModel {
         }
       }
 
-      // 3. Registrar el seguimiento si tenemos ID de usuario
-      bool followed = false;
-      if (user != null) {
-        try {
-          await bandsRepo.followBand(band.id, user.id);
-          followed = true;
-        } catch (_) {}
+      // 3. Registrar el seguimiento si tenemos ID de usuario. Si falla por red,
+      //    se encola el ID (ya lo conocemos) para sincronizar al volver la señal.
+      if (user == null) {
+        return QrScanResult(
+          band: band,
+          message: '¡Banda encontrada! Bienvenido al perfil de ${band.name}.',
+          isOffline: false,
+          isSuccess: true,
+        );
       }
-
+      await bandsRepo.followBand(band.id, user.id);
       return QrScanResult(
         band: band,
-        message: followed || user != null
-            ? '¡Ahora sigues a ${band.name}! Conexión directa establecida.'
-            : '¡Banda encontrada! Bienvenido al perfil de ${band.name}.',
+        message: '¡Ahora sigues a ${band.name}! Conexión directa establecida.',
         isOffline: false,
         isSuccess: true,
       );
     } catch (e) {
-      // Alternativa de contingencia a sótano si la red falló durante el proceso
-      await pendingFollowService.queueFollow(target);
-      return const QrScanResult(
-        message: 'Sin señal en el sótano: quedaste anotado y te sumamos como seguidor apenas recuperes conexión.',
-        isOffline: true,
-        isSuccess: true,
-      );
+      // La red falló a mitad del proceso: se encola el id si ya lo tenemos.
+      return _queueOffline(band?.id ?? target, band: band);
     }
+  }
+
+  /// Un QR trae un id (uuid) o un slug: se consulta por el campo que corresponde.
+  Future<Band?> _findBand(String target) =>
+      isUuid(target) ? bandsRepo.getBandById(target) : bandsRepo.getBandBySlug(target);
+
+  /// Encola el follow (id o slug; `SessionViewModel.syncPendingFollows` resuelve
+  /// el slug al sincronizar) y devuelve el resultado "sin señal".
+  Future<QrScanResult> _queueOffline(String target, {Band? band}) async {
+    await pendingFollowService.queueFollow(target);
+    return QrScanResult(
+      band: band,
+      message: 'Sin señal en el sótano: quedaste anotado y te sumamos como seguidor apenas recuperes conexión.',
+      isOffline: true,
+      isSuccess: true,
+    );
   }
 }

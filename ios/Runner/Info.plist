@@ -49,6 +49,29 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Permisos: sin estas descripciones iOS cierra la app al pedir el recurso -->
+	<key>NSCameraUsageDescription</key>
+	<string>StreamTunes usa la cámara para escanear el QR de las bandas en los recitales y para sacar fotos de portada.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>StreamTunes accede a tus fotos para elegir portadas de temas y fotos de recitales.</string>
+	<!-- Segundo plano: música con la pantalla bloqueada y notificaciones push -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>remote-notification</string>
+	</array>
+	<!-- Deep links: streamtunes://band/<slug> abre el perfil de la banda -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.streamtunes.app.streamtunes</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>streamtunes</string>
+			</array>
+		</dict>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

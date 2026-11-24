@@ -165,9 +165,12 @@ class DonationViewModel extends ViewModel {
     }
   }
 
-  /// Paso 2: el fan confirma que transfirió al alias y se publica en el muro.
-  /// Usa el mismo [donationId] que el checkout: si el webhook ya lo registró,
-  /// el repositorio devuelve esa fila en lugar de crear otra.
+  /// Paso 2: el fan avisa que transfirió al alias.
+  ///
+  /// La donación queda PENDIENTE: no suma al total ni aparece en el muro hasta
+  /// que la banda confirme que recibió la plata (o el webhook de Mercado Pago
+  /// la apruebe, si pagó por checkout). Usa el mismo [donationId] que el
+  /// checkout, así un mismo aporte nunca queda registrado dos veces.
   Future<bool> confirmDonation() async {
     if (!canConfirmTransfer) return false;
     _isSubmitting = true;
@@ -184,7 +187,7 @@ class DonationViewModel extends ViewModel {
               amountArs: _amount,
               message: _message.isEmpty ? null : _message,
               isAnonymous: _isAnonymous,
-              status: 'approved',
+              status: 'pending',
               createdAt: DateTime.now(),
             ),
           )

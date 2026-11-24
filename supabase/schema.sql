@@ -11,6 +11,7 @@
 --   * 20261116010000_donations_integrity.sql  (total por estado + RLS de donaciones)
 --   * 20261116020000_rls_hardening.sql        (cierra políticas abiertas de tablas y Storage)
 --   * 20261116030000_function_hardening.sql   (permisos de funciones, top fans y métricas)
+--   * 20261124000000_donations_pending.sql    (donaciones del fan pendientes, revisión de la banda)
 --
 -- No incluye objetos administrados por Supabase (esquemas auth/storage,
 -- event trigger `rls_auto_enable`) ni la tabla `usuarios`, que existe en la
