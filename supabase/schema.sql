@@ -13,6 +13,9 @@
 --   * 20261116030000_function_hardening.sql   (permisos de funciones, top fans y métricas)
 --   * 20261124000000_donations_pending.sql    (donaciones pendientes; reemplazado por la siguiente)
 --   * 20261124010000_kiwi_collects_payouts.sql (KIWI cobra todo: liquidaciones a bandas)
+--   * 20261124020000_payment_idempotency.sql  (un pago de MP = un aporte)
+--   * 20261124030000_privacy_rejected_payments_tokens.sql (aportes anónimos,
+--     pagos a devolver y registro de tokens push)
 --
 -- No incluye objetos administrados por Supabase (esquemas auth/storage,
 -- event trigger `rls_auto_enable`) ni la tabla `usuarios`, que existe en la

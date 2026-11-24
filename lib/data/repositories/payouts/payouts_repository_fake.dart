@@ -13,6 +13,22 @@ class FakePayoutsRepository implements PayoutsRepository {
 
   final Map<String, ({String name, double gross, double net})> _collected;
   final List<BandPayout> _payouts = [];
+  final List<RejectedPayment> _rejected = [];
+
+  /// Simula un pago que el webhook no pudo registrar (para tests).
+  void addRejected(RejectedPayment payment) => _rejected.add(payment);
+
+  @override
+  Future<List<RejectedPayment>> getPendingRefunds() async => List.of(_rejected);
+
+  @override
+  Future<void> markRefunded(String rejectedPaymentId) async {
+    final before = _rejected.length;
+    _rejected.removeWhere((r) => r.id == rejectedPaymentId);
+    if (_rejected.length == before) {
+      throw const AppException('Ese pago ya estaba marcado como devuelto o no existe.');
+    }
+  }
 
   BandBalance _balanceOf(String bandId) {
     final c = _collected[bandId];

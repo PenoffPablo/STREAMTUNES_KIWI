@@ -59,4 +59,21 @@ class SupabasePayoutsRepository implements PayoutsRepository {
             .withNetworkTimeout();
     return BandPayout.fromJson(res);
   }
+
+  @override
+  Future<List<RejectedPayment>> getPendingRefunds() async {
+    // RLS: solo un moderador puede leer `rejected_payments`.
+    final res = await (_client
+            .from('rejected_payments')
+            .select('id, mp_payment_id, amount, reason, created_at, band:bands(name)')
+            .isFilter('refunded_at', null)
+            .order('created_at', ascending: false))
+        .withNetworkTimeout();
+    return (res as List).map((row) => RejectedPayment.fromJson(row as Map<String, dynamic>)).toList();
+  }
+
+  @override
+  Future<void> markRefunded(String rejectedPaymentId) async {
+    await _client.rpc('mark_rejected_payment_refunded', params: {'p_id': rejectedPaymentId}).withNetworkTimeout();
+  }
 }

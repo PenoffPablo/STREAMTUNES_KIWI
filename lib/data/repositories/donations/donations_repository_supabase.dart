@@ -23,6 +23,9 @@ class SupabaseDonationsRepository implements DonationsRepository {
 
   SupabaseDonationsRepository(this._client);
 
+  /// Columnas que el público puede leer de `donations`.
+  static const _publicColumns = 'id, band_id, amount, currency, message, is_public, donor_name, status, created_at';
+
   void _unsubscribeRealtime() {
     final channel = _channel;
     _channel = null;
@@ -75,8 +78,9 @@ class SupabaseDonationsRepository implements DonationsRepository {
     final res =
         await (_client
                 .from('donations')
-                // Nombre del donante desde profiles (la tabla no guarda donor_name).
-                .select('*, donor:profiles!donations_donor_id_fkey(display_name)')
+                // Solo columnas públicas: el donante real, el neto y el id del
+                // pago no se exponen (ver migración 20261124030000).
+                .select(_publicColumns)
                 .eq('band_id', bandId)
                 .eq('status', 'approved')
                 .order('created_at', ascending: false))
@@ -87,17 +91,8 @@ class SupabaseDonationsRepository implements DonationsRepository {
 
   @override
   Future<List<Donation>> getRecentVerified({int limit = 20}) async {
-    final res =
-        await (_client
-                .from('donations')
-                .select(
-                  '*, band:bands(name), donor:profiles!donations_donor_id_fkey(display_name)',
-                )
-                .eq('status', 'approved')
-                .not('mp_payment_id', 'is', null)
-                .order('created_at', ascending: false)
-                .limit(limit))
-            .withNetworkTimeout();
+    // RPC solo para moderadores: incluye neto, id de MP y nombre de la banda.
+    final res = await _client.rpc('admin_recent_payments', params: {'p_limit': limit}).withNetworkTimeout();
     return (res as List).map((json) => Donation.fromJson(json)).toList();
   }
 

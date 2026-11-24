@@ -373,6 +373,33 @@ class _AdminModerationViewState extends State<AdminModerationView> {
     );
   }
 
+  Future<void> _markRefunded(RejectedPayment payment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('¿Ya devolviste este pago?', style: TextStyle(fontSize: 16)),
+        content: Text(
+          'Confirmá solo si ya hiciste la devolución de ${_money(payment.amount)} '
+          '(pago ${payment.mpPaymentId}) desde Mercado Pago.',
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Sí, lo devolví')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await _viewModel.markRefunded(payment.id);
+    if (!mounted || ok) return;
+    showErrorSnackBar(
+      context,
+      title: 'No se pudo marcar la devolución',
+      message: _viewModel.payoutError ?? kUnexpectedErrorMessage,
+    );
+  }
+
   static String _money(double v) => v == v.roundToDouble() ? '\$${v.toStringAsFixed(0)}' : '\$${v.toStringAsFixed(2)}';
 
   static String _dateTime(DateTime d) {
@@ -458,6 +485,38 @@ class _AdminModerationViewState extends State<AdminModerationView> {
             '(descontada la comisión) menos lo ya liquidado.',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
           ),
+
+          // Pagos cobrados que no se pudieron registrar: hay que devolverlos.
+          if (vm.pendingRefunds.isNotEmpty) ...[
+            sectionTitle('PAGOS A DEVOLVER (${_money(vm.totalToRefund)})'),
+            const Text(
+              'Mercado Pago los cobró pero no se pudieron registrar como aporte. Devolvé cada uno '
+              'desde Mercado Pago (Actividad → el pago → Devolver) y después marcalo acá.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            ),
+            for (final r in vm.pendingRefunds)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.undo, color: AppTheme.accentOrange),
+                title: Text(
+                  '${_money(r.amount)} · ${r.bandName ?? 'Sin banda'}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  '${r.reason}\nPago MP ${r.mpPaymentId} · ${_dateTime(r.createdAt)}',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
+                isThreeLine: true,
+                trailing: vm.isRefunding(r.id)
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentOrange),
+                      )
+                    : TextButton(onPressed: () => _markRefunded(r), child: const Text('Ya lo devolví')),
+              ),
+          ],
 
           // Saldo por banda
           sectionTitle('SALDO POR BANDA'),

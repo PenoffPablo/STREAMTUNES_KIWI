@@ -10,6 +10,7 @@ import 'package:streamtunes/data/repositories/moderation/moderation_repository_f
 import 'package:streamtunes/data/repositories/payouts/payouts_repository_fake.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository_fake.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
+import 'package:streamtunes/domain/models/donation.dart';
 import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dart';
 import 'package:streamtunes/ui/band_dashboard/view_models/band_dashboard_view_model.dart';
 import 'package:streamtunes/ui/core/widgets/error_banner.dart';
@@ -127,6 +128,60 @@ void main() {
       expect(vm.accountError, contains('No se pudo actualizar tu saldo con KIWI'));
       expect(vm.accountError, contains('No hay conexión'));
     });
+  });
+
+  group('Pagos a devolver', () {
+    test('el moderador ve los pagos cobrados que no se registraron y los marca devueltos', () async {
+      final payouts = FakePayoutsRepository(collected: {})
+        ..addRejected(RejectedPayment(
+          id: 'r1',
+          mpPaymentId: '123456',
+          amount: 2500,
+          reason: 'Solo se puede donar a bandas aprobadas.',
+          createdAt: DateTime(2026, 11, 24),
+          bandName: 'Los Fuzzers',
+        ));
+      final vm = AdminModerationViewModel(
+        moderationRepo: FakeModerationRepository(),
+        configRepo: FakeConfigRepository(),
+        payoutsRepo: payouts,
+      );
+      addTearDown(vm.dispose);
+      await vm.loadModerationData();
+
+      expect(vm.pendingRefunds.single.mpPaymentId, '123456');
+      expect(vm.totalToRefund, 2500);
+
+      expect(await vm.markRefunded('r1'), isTrue);
+      expect(vm.pendingRefunds, isEmpty);
+
+      expect(await vm.markRefunded('r1'), isFalse, reason: 'no se marca dos veces');
+      expect(vm.payoutError, contains('ya estaba marcado'));
+    });
+  });
+
+  test('un aporte anónimo nunca muestra el nombre del donante', () {
+    final d = Donation.fromJson({
+      'id': 'd1',
+      'band_id': _bandId,
+      'amount': 1000,
+      'is_public': false,
+      'donor_name': null,
+      'status': 'approved',
+      'created_at': '2026-11-24T10:00:00Z',
+    });
+    expect(d.donorName, 'Fan anónimo');
+    expect(d.donorUserId, isNull, reason: 'la base ya no expone donor_id al público');
+
+    final pub = Donation.fromJson({
+      'id': 'd2',
+      'band_id': _bandId,
+      'amount': 1000,
+      'is_public': true,
+      'donor_name': 'Juan Rock',
+      'created_at': '2026-11-24T10:00:00Z',
+    });
+    expect(pub.donorName, 'Juan Rock');
   });
 
   testWidgets('ErrorBanner muestra qué falló, la explicación y Reintentar', (tester) async {

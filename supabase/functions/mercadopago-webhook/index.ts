@@ -25,6 +25,37 @@ const supabase = createClient(
 /** Estados de MP que anulan un pago que ya había sido aprobado. */
 const REVERSED = new Set(["refunded", "charged_back", "cancelled"]);
 
+/**
+ * Pago que MP aprobó pero que no se puede registrar como aporte (banda
+ * suspendida, monto mayor al tope, pago sin banda). La plata ya está en la
+ * cuenta de KIWI: se guarda en `rejected_payments` para que un moderador la
+ * vea en su panel y la devuelva. Idempotente por `mp_payment_id`.
+ */
+async function recordRejected(
+  mpPaymentId: string,
+  amount: number,
+  reason: string,
+  bandId: string | null,
+  donorId: string | null,
+) {
+  const { error } = await supabase.from("rejected_payments").upsert(
+    { mp_payment_id: mpPaymentId, amount, reason, band_id: bandId, donor_id: donorId },
+    { onConflict: "mp_payment_id", ignoreDuplicates: true },
+  );
+  if (error) {
+    // Si la banda o el donante ya no existen, se guarda sin esas referencias.
+    if (error.code === "23503") {
+      const retry = await supabase.from("rejected_payments").upsert(
+        { mp_payment_id: mpPaymentId, amount, reason, band_id: null, donor_id: null },
+        { onConflict: "mp_payment_id", ignoreDuplicates: true },
+      );
+      if (retry.error) throw retry.error;
+      return;
+    }
+    throw error;
+  }
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -33,6 +64,12 @@ function json(body: unknown, status = 200) {
 }
 
 serve(async (req) => {
+  // Sin token no se puede verificar NINGÚN pago: 500 para que MP reintente
+  // cuando el secret esté configurado (con 200 los pagos se perderían).
+  if (!MP_ACCESS_TOKEN) {
+    console.error("Falta el secret MP_ACCESS_TOKEN");
+    return json({ error: "Webhook sin configurar" }, 500);
+  }
   try {
     const url = new URL(req.url);
     let paymentId = url.searchParams.get("data.id") || url.searchParams.get("id");
@@ -53,7 +90,15 @@ serve(async (req) => {
     const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
       headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` },
     });
-    if (!mpRes.ok) return json({ error: "Failed to fetch payment from MP" });
+    if (!mpRes.ok) {
+      // 404: la notificación no es de un pago real (p. ej. pruebas): no hay
+      // nada que registrar. Cualquier otro error (500, 429, 401) es pasajero
+      // o de configuración: 500 para que Mercado Pago REINTENTE y el pago no
+      // se pierda.
+      if (mpRes.status === 404) return json({ skipped: "payment not found" });
+      console.error("Mercado Pago respondió", mpRes.status, "al consultar el pago", paymentId);
+      return json({ error: "No se pudo consultar el pago en Mercado Pago" }, 500);
+    }
     const payment = await mpRes.json();
     const mpPaymentId = String(payment.id ?? paymentId);
 
@@ -81,14 +126,19 @@ serve(async (req) => {
       }
     }
     const bandId = String(meta.band_id ?? "");
-    if (!bandId) return json({ error: "Pago sin band_id en metadata" });
+    const donorId = (meta.donor_id as string | null) ?? null;
+    const amount = Number(payment.transaction_amount);
+    if (!bandId) {
+      await recordRejected(mpPaymentId, amount, "El pago no indica a qué banda va.", null, donorId);
+      return json({ status: "rejected", payment_id: mpPaymentId, reason: "sin band_id" });
+    }
 
     // Sin `id`: lo genera la base. Así ningún dato que venga de afuera puede
     // apuntar a una fila existente.
     const row = {
       band_id: bandId,
-      donor_id: (meta.donor_id as string | null) ?? null,
-      amount: Number(payment.transaction_amount),
+      donor_id: donorId,
+      amount,
       // Lo que efectivamente entra a la cuenta de KIWI (descontada la comisión
       // de MP). Es la base de lo que después se le liquida a la banda.
       net_amount: Number(payment.transaction_details?.net_received_amount ?? payment.transaction_amount),
@@ -106,11 +156,19 @@ serve(async (req) => {
       .upsert(row, { onConflict: "mp_payment_id", ignoreDuplicates: true });
     if (error) {
       // Rechazo de negocio de la base (banda no aprobada, monto > tope):
-      // reintentar no lo arregla. Se registra y se responde 200 para que
-      // Mercado Pago no reintente en loop.
+      // reintentar no lo arregla. Se guarda como "pago a devolver" (visible
+      // en el panel de moderación) y se responde 200 para que MP no reintente.
       if (error.code === "P0001") {
         console.error("Pago aprobado que la base rechazó", mpPaymentId, error.message);
+        await recordRejected(mpPaymentId, amount, error.message, bandId, donorId);
         return json({ status: "rejected", payment_id: mpPaymentId, reason: error.message });
+      }
+      // Banda o donante inexistentes / id con formato inválido: tampoco se
+      // arregla reintentando.
+      if (error.code === "23503" || error.code === "22P02") {
+        console.error("Pago aprobado con datos inválidos", mpPaymentId, error.message);
+        await recordRejected(mpPaymentId, amount, "La banda o el donante del pago no existen.", null, null);
+        return json({ status: "rejected", payment_id: mpPaymentId, reason: error.code });
       }
       throw error;
     }

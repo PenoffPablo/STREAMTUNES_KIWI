@@ -125,6 +125,9 @@ El menú inferior y las secciones disponibles se adaptan estrictamente al contex
 
 Detalles:
 * Cada pago de Mercado Pago se registra una sola vez: `donations.mp_payment_id` es único y el webhook hace *upsert* por ese id, así los reintentos de Mercado Pago no duplican. Cada intento del fan lleva además un id propio (solo para trazabilidad), así dos pagos desde el mismo modal son dos aportes.
+* Si Mercado Pago no responde al verificar un pago, el webhook contesta error para que Mercado Pago **reintente**: el pago no se pierde.
+* **Pagos a devolver:** si un pago se aprueba pero no se puede registrar (la banda fue suspendida o el monto supera el tope), queda en `rejected_payments` y el moderador lo ve en su panel para devolverlo.
+* **Aportes anónimos de verdad:** el público solo puede leer monto, mensaje, fecha y el nombre del donante si el aporte es público. Quién donó, el neto y el id del pago solo los ve un moderador.
 * Si Mercado Pago devuelve o contracargo un pago, el webhook lo marca `refunded` y deja de contar para el saldo de la banda.
 * El donante se toma de la sesión (JWT), nunca del cliente.
 * No se puede liquidar más que el saldo pendiente: la base lo impide, aunque dos moderadores registren pagos a la vez.
@@ -216,6 +219,7 @@ El backend opera sobre PostgreSQL con políticas estrictas de seguridad a nivel 
 * `playlist_songs`: Tabla relacional que vincula temas y listas manteniendo la posición secuencial.
 * `band_follows`: Relación muchos a muchos entre usuarios y bandas seguidas.
 * `donations`: Aportes verificados por Mercado Pago (bruto, neto, id del pago, estado y mensaje). Solo los escribe el webhook.
+* `rejected_payments`: Pagos cobrados por Mercado Pago que no se pudieron registrar como aporte y hay que devolver (solo moderadores).
 * `band_payouts`: Liquidaciones de KIWI a cada banda (monto, número de operación). Solo las registra un moderador; la base impide pagar más que el saldo.
 * `device_tokens`: Tokens FCM por dispositivo (cada usuario solo ve los suyos).
 * `app_admins`: Lista de control de acceso para miembros con facultades de moderación sobre el colectivo.
@@ -289,6 +293,11 @@ La migración `20261124010000_kiwi_collects_payouts.sql` reemplaza ese flujo por
 * Agrega la función `band_balances` (saldo por banda) y un trigger que impide liquidar más que el saldo.
 
 La migración `20261124020000_payment_idempotency.sql` hace único `donations.mp_payment_id`: un mismo pago de Mercado Pago no puede registrarse dos veces.
+
+La migración `20261124030000_privacy_rejected_payments_tokens.sql`:
+* Agrega `donations.donor_name` (vacío si el aporte es anónimo) y deja leer al público solo las columnas no sensibles. Los moderadores ven los pagos con la función `admin_recent_payments`.
+* Agrega la tabla `rejected_payments` y la función `mark_rejected_payment_refunded`.
+* Agrega `register_device_token`, que asigna el token push al usuario de la sesión aunque el teléfono haya tenido otra cuenta.
 
 ### Limitación conocida
 Los paneles se actualizan solos cuando entra un **aporte** (Realtime sobre `donations`). Las **liquidaciones** (`band_payouts`) no se escuchan en vivo: el panel del moderador se actualiza al registrarlas, y la banda ve la suya al recibir el push o al recargar su panel.

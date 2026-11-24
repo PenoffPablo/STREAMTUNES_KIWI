@@ -22,6 +22,8 @@ class AdminModerationViewModel extends ViewModel {
   List<SongReport> _openReports = [];
   List<BandBalance> _balances = [];
   List<Donation> _recentPayments = [];
+  List<RejectedPayment> _pendingRefunds = [];
+  String? _refundingId;
   String? _moneyError;
   StreamSubscription<Donation>? _liveSub;
   AppConfig _config = const AppConfig();
@@ -61,6 +63,12 @@ class AdminModerationViewModel extends ViewModel {
   /// Error al cargar saldos o pagos. Se muestra en el panel en lugar de una
   /// lista vacía, para no confundir "no hay pagos" con "no se pudo cargar".
   String? get moneyError => _moneyError;
+
+  /// Pagos que KIWI cobró pero no se pudieron registrar como aporte (banda
+  /// suspendida, monto mayor al tope...). Hay que devolvérselos al fan.
+  List<RejectedPayment> get pendingRefunds => List.unmodifiable(_pendingRefunds);
+  double get totalToRefund => _pendingRefunds.fold(0, (sum, r) => sum + r.amount);
+  bool isRefunding(String id) => _refundingId == id;
 
   /// Totales de todas las bandas.
   double get totalCollected => _balances.fold(0, (sum, b) => sum + b.collected);
@@ -121,15 +129,17 @@ class AdminModerationViewModel extends ViewModel {
     final requestId = ++_moneyRequestId;
     final payouts = payoutsRepo;
     final donations = donationsRepo;
-    final (balances, payments) = await (
+    final (balances, payments, refunds) = await (
       _attempt(payouts?.getAllBalances, 'los saldos de las bandas'),
       _attempt(donations == null ? null : () => donations.getRecentVerified(), 'los últimos pagos'),
+      _attempt(payouts?.getPendingRefunds, 'los pagos a devolver'),
     ).wait;
     if (requestId != _moneyRequestId || isDisposed) return; // respuesta vieja
 
     if (balances.$1 != null) _balances = balances.$1!;
     if (payments.$1 != null) _recentPayments = payments.$1!;
-    _moneyError = balances.$2 ?? payments.$2;
+    if (refunds.$1 != null) _pendingRefunds = refunds.$1!;
+    _moneyError = balances.$2 ?? payments.$2 ?? refunds.$2;
   }
 
   /// Ejecuta [load] y devuelve (dato, null) o (null, mensaje de error legible).
@@ -159,6 +169,26 @@ class AdminModerationViewModel extends ViewModel {
       return false;
     } finally {
       _payingBandId = null;
+      notifyListeners();
+    }
+  }
+
+  /// El moderador ya le devolvió el pago al fan desde Mercado Pago.
+  Future<bool> markRefunded(String rejectedPaymentId) async {
+    final repo = payoutsRepo;
+    if (repo == null || _refundingId != null) return false;
+    _refundingId = rejectedPaymentId;
+    _payoutError = null;
+    notifyListeners();
+    try {
+      await repo.markRefunded(rejectedPaymentId);
+      _pendingRefunds.removeWhere((r) => r.id == rejectedPaymentId);
+      return true;
+    } catch (e) {
+      _payoutError = describeError(e);
+      return false;
+    } finally {
+      _refundingId = null;
       notifyListeners();
     }
   }

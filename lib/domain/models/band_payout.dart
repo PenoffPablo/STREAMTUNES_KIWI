@@ -86,3 +86,36 @@ class BandBalance {
         pending: 0,
       );
 }
+
+/// Pago que Mercado Pago aprobó (la plata está en la cuenta de KIWI) pero que
+/// no se pudo registrar como aporte: banda suspendida, monto mayor al tope o
+/// pago sin banda. Un moderador tiene que devolverlo al fan.
+class RejectedPayment {
+  const RejectedPayment({
+    required this.id,
+    required this.mpPaymentId,
+    required this.amount,
+    required this.reason,
+    required this.createdAt,
+    this.bandName,
+  });
+
+  final String id;
+  final String mpPaymentId;
+  final double amount;
+  final String reason;
+  final DateTime createdAt;
+  final String? bandName;
+
+  factory RejectedPayment.fromJson(Map<String, dynamic> json) {
+    final band = json['band'];
+    return RejectedPayment(
+      id: json['id'] as String,
+      mpPaymentId: json['mp_payment_id'] as String,
+      amount: (json['amount'] as num).toDouble(),
+      reason: json['reason'] as String? ?? '',
+      createdAt: DateTime.parse(json['created_at'] as String),
+      bandName: band is Map ? band['name'] as String? : null,
+    );
+  }
+}

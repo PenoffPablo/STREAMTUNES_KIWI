@@ -71,21 +71,19 @@ class Donation {
     );
   }
 
-  /// Columnas reales de `public.donations`: donor_id, amount, net_amount,
-  /// mp_payment_id, currency, is_public, status. El nombre del donante NO se
-  /// guarda en la tabla: viene del join con `profiles` (alias `donor`) y se
-  /// oculta si la donación es anónima. La banda, del join con `bands` (alias `band`).
+  /// Columnas de `public.donations`. El público solo puede leer las no
+  /// sensibles: `donor_name` (NULL si el aporte es anónimo, lo arma la base),
+  /// monto, mensaje y fecha. `donor_id`, `net_amount` y `mp_payment_id` solo
+  /// llegan por la RPC de moderación `admin_recent_payments` (con `band_name`).
   factory Donation.fromJson(Map<String, dynamic> json) {
     final isPublic = json['is_public'] as bool? ?? true;
-    final profile = json['donor'];
-    final profileName = profile is Map ? profile['display_name'] as String? : null;
-    final band = json['band'];
+    final donorName = json['donor_name'] as String?;
 
     return Donation(
       id: json['id'] as String,
       bandId: json['band_id'] as String,
       donorUserId: json['donor_id'] as String?,
-      donorName: !isPublic ? 'Fan anónimo' : (profileName ?? 'Fan de la banda'),
+      donorName: !isPublic ? 'Fan anónimo' : (donorName ?? 'Fan de la banda'),
       amountArs: (json['amount'] as num?)?.toDouble() ?? 0.0,
       message: json['message'] as String?,
       isAnonymous: !isPublic,
@@ -95,7 +93,7 @@ class Donation {
           : DateTime.now(),
       netAmount: (json['net_amount'] as num?)?.toDouble(),
       mpPaymentId: json['mp_payment_id'] as String?,
-      bandName: band is Map ? band['name'] as String? : null,
+      bandName: json['band_name'] as String?,
     );
   }
 }

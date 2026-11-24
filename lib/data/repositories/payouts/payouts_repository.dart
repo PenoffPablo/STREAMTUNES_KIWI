@@ -20,4 +20,11 @@ abstract class PayoutsRepository {
     String? reference,
     String? note,
   });
+
+  /// Pagos aprobados por Mercado Pago que no se pudieron registrar como
+  /// aporte y todavía no se devolvieron (solo moderadores).
+  Future<List<RejectedPayment>> getPendingRefunds();
+
+  /// Marca que el moderador ya devolvió el pago desde Mercado Pago.
+  Future<void> markRefunded(String rejectedPaymentId);
 }
