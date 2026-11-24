@@ -37,6 +37,7 @@ create policy "ver donaciones" on public.donations
 
 -- Confirmar / rechazar: los miembros de la banda pueden pasar una donación
 -- pendiente a 'approved' (la recibieron) o 'refunded' (no llegó).
+drop policy if exists donaciones_revision_banda on public.donations;
 create policy donaciones_revision_banda on public.donations
   for update to authenticated
   using (public.is_band_member(band_id) and status = 'pending')
