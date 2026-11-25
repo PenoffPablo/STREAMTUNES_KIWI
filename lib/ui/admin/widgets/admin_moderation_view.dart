@@ -8,6 +8,7 @@ import 'package:streamtunes/ui/core/widgets/empty_state_view.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
 import 'package:streamtunes/ui/admin/widgets/payout_dialog.dart';
 import 'package:streamtunes/ui/admin/widgets/admin_section_header.dart';
+import 'package:streamtunes/ui/admin/widgets/kiwi_commission_card.dart';
 import 'package:streamtunes/ui/admin/widgets/payouts_section.dart';
 import 'package:streamtunes/ui/admin/widgets/pending_band_card.dart';
 import 'package:streamtunes/ui/admin/widgets/song_report_card.dart';
@@ -86,6 +87,17 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                       },
                     ),
                     const SizedBox(height: 20),
+
+                    // Comisión de KIWI: lo que retiene la app para sostenerse
+                    KiwiCommissionCard(
+                      pct: vm.kiwiCommissionPct,
+                      collected: vm.totalCollected,
+                      mercadoPagoFees: vm.totalFees,
+                      net: vm.totalNet,
+                      kiwiFee: vm.totalKiwiFee,
+                      bandShare: vm.totalBandShare,
+                    ),
+                    const SizedBox(height: 12),
 
                     // Liquidaciones: lo que KIWI cobró y le debe a cada banda
                     PayoutsSection(viewModel: vm, onPay: _pay, onMarkRefunded: _markRefunded),

@@ -17,7 +17,8 @@ class SupabaseConfigRepository implements ConfigRepository {
           .withNetworkTimeout();
       final Map<String, String> map = {};
       for (final row in res as List) {
-        map[row['key'] as String] = row['value'] as String;
+        // `value` es integer en la base: llega como int, no como String.
+        map[row['key'] as String] = '${row['value']}';
       }
       return AppConfig.fromMap(map);
     } catch (e) {

@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:streamtunes/domain/models/app_config.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 
-/// Estado de cuenta con KIWI: lo recaudado (neto), lo ya cobrado y lo que
+/// Estado de cuenta con KIWI: lo que le corresponde a la banda (neto menos la
+/// comisión de KIWI), lo ya cobrado y lo que
 /// falta cobrar, más los últimos pagos que KIWI le hizo a la banda.
 class KiwiAccountCard extends StatelessWidget {
-  const KiwiAccountCard({super.key, required this.balance, required this.payouts});
+  const KiwiAccountCard({
+    super.key,
+    required this.balance,
+    required this.payouts,
+    this.commissionPct = kDefaultKiwiCommissionPct,
+  });
 
   final BandBalance balance;
   final List<BandPayout> payouts;
+
+  /// Comisión de KIWI sobre el neto (ya descontada en el saldo).
+  final int commissionPct;
 
   @override
   Widget build(BuildContext context) {
@@ -55,15 +65,17 @@ class KiwiAccountCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              stat('Recaudado (neto)', _money(b.netCollected)),
+              stat('Te corresponde', _money(b.bandShare)),
               stat('Ya cobrado', _money(b.paid)),
               stat('A cobrar', _money(b.pending), color: b.hasPending ? AppTheme.primary : null),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Los fans pagan con Mercado Pago a la cuenta de KIWI. Comisión de Mercado Pago '
-            'descontada: ${_money(b.mercadoPagoFees)}.',
+            'Los fans pagan con Mercado Pago a la cuenta de KIWI. De lo recaudado '
+            '(${_money(b.collected)}) se descuenta la comisión de Mercado Pago '
+            '(${_money(b.mercadoPagoFees)}) y el $commissionPct% de KIWI (${_money(b.kiwiFee)}), '
+            'que sostiene la app: servidores, almacenamiento y la operación.',
             style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
           ),
           if (payouts.isNotEmpty) ...[

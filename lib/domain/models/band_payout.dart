@@ -42,10 +42,14 @@ class BandBalance {
   /// Lo que efectivamente recibió KIWI, descontada la comisión de MP.
   final double netCollected;
 
+  /// Comisión de KIWI (20% del neto) para sostener la app. Ya está descontada
+  /// de [pending].
+  final double kiwiFee;
+
   /// Lo que KIWI ya le transfirió a la banda.
   final double paid;
 
-  /// Saldo a favor de la banda: neto - liquidado.
+  /// Saldo a favor de la banda: neto - comisión KIWI - liquidado.
   final double pending;
 
   final DateTime? lastPayoutAt;
@@ -55,12 +59,16 @@ class BandBalance {
     required this.bandName,
     required this.collected,
     required this.netCollected,
+    this.kiwiFee = 0,
     required this.paid,
     required this.pending,
     this.lastPayoutAt,
   });
 
   double get mercadoPagoFees => collected - netCollected;
+
+  /// Lo que le corresponde a la banda en total (cobrado o no).
+  double get bandShare => netCollected - kiwiFee;
   bool get hasPending => pending > 0.009;
 
   factory BandBalance.fromJson(Map<String, dynamic> json) {
@@ -71,6 +79,7 @@ class BandBalance {
       bandName: json['band_name'] as String? ?? 'Banda',
       collected: n('collected'),
       netCollected: n('net_collected'),
+      kiwiFee: n('kiwi_fee'),
       paid: n('paid'),
       pending: n('pending'),
       lastPayoutAt: last != null ? DateTime.parse(last) : null,

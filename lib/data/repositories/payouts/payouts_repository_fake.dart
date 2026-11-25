@@ -1,9 +1,11 @@
 import 'package:streamtunes/data/repositories/payouts/payouts_repository.dart';
+import 'package:streamtunes/domain/models/app_config.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
 import 'package:streamtunes/utils/async_utils.dart';
 
 /// Implementación en memoria (modo offline / tests). Se inicializa con el neto
-/// cobrado por banda; los pagos se descuentan igual que en la base.
+/// cobrado por banda; la comisión de KIWI y los pagos se descuentan igual
+/// que en la base.
 class FakePayoutsRepository implements PayoutsRepository {
   FakePayoutsRepository({Map<String, ({String name, double gross, double net})>? collected})
       : _collected = collected ??
@@ -37,13 +39,16 @@ class FakePayoutsRepository implements PayoutsRepository {
           null,
           (a, b) => a == null || b.isAfter(a) ? b : a,
         );
+    final net = c?.net ?? 0;
+    final fee = (net * kDefaultKiwiCommissionPct).round() / 100;
     return BandBalance(
       bandId: bandId,
       bandName: c?.name ?? 'Banda',
       collected: c?.gross ?? 0,
-      netCollected: c?.net ?? 0,
+      netCollected: net,
+      kiwiFee: fee,
       paid: paid,
-      pending: (c?.net ?? 0) - paid,
+      pending: net - fee - paid,
       lastPayoutAt: last,
     );
   }

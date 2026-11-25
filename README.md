@@ -40,7 +40,7 @@ StreamTunes es una plataforma nativa de streaming musical y gestión comunitaria
 El modelo tradicional de distribución digital a menudo excluye o precariza a los artistas independientes debido a intermediarios costosos, requerimientos de conectividad constante y métricas de consumo opacas. 
 
 StreamTunes responde a esta problemática implementando:
-1. **Aportes transparentes:** los fans aportan con Mercado Pago a la cuenta de KIWI, y KIWI le liquida a cada banda el neto verificado. La banda ve en su panel lo recaudado, la comisión de Mercado Pago, lo cobrado y lo pendiente.
+1. **Aportes transparentes:** los fans aportan con Mercado Pago a la cuenta de KIWI, y KIWI le liquida a cada banda el neto verificado menos un 20% que retiene para sostener la app. La banda ve en su panel lo recaudado, la comisión de Mercado Pago, la de KIWI, lo cobrado y lo pendiente.
 2. **Resiliencia en Recitales:** Mecanismo offline para captura y suscripción a bandas en recitales subterráneos o espacios cerrados con señal deficiente, sincronizándose de manera automática al recuperar red.
 3. **Gestión Integral:** Herramientas para que cada agrupación administre su discografía, conciertos, galerías y estadísticas con cuotas controladas para mitigar la saturación de infraestructura.
 
@@ -121,7 +121,8 @@ El menú inferior y las secciones disponibles se adaptan estrictamente al contex
 1. **El fan paga con el checkout de Mercado Pago.** La preferencia la crea la Edge Function `mercadopago-create-preference` con la cuenta de KIWI. El **Access Token vive solo en el servidor**, nunca en la app.
 2. **El webhook verifica el pago contra la API de Mercado Pago** y recién ahí registra la donación, con el monto real, el **neto** que recibió KIWI y el id del pago. La app **nunca** inserta ni aprueba donaciones: no se pueden falsificar.
 3. **El aporte aparece en el muro en tiempo real** (Supabase Realtime) y la banda recibe un push.
-4. **Liquidación:** un moderador ve en su panel cuánto le debe KIWI a cada banda (neto verificado − ya pagado), hace la transferencia y la **registra** con el número de operación. La banda recibe un push y ve en su panel lo recaudado, lo ya cobrado y lo que le falta cobrar.
+4. **Comisión de KIWI:** de cada aporte, KIWI retiene el **20% del neto** (lo que queda después de Mercado Pago) para sostener la app: servidores, almacenamiento y la operación. Ejemplo: el fan aporta $1000, Mercado Pago cobra $60, KIWI retiene $188 y a la banda le corresponden $752. El moderador ve el total retenido en un apartado propio, la banda lo ve en su cuenta y el fan ve una línea al aportar.
+5. **Liquidación:** un moderador ve en su panel cuánto le debe KIWI a cada banda (neto verificado − comisión de KIWI − ya pagado), hace la transferencia y la **registra** con el número de operación. La banda recibe un push y ve en su panel lo recaudado, lo ya cobrado y lo que le falta cobrar.
 
 Detalles:
 * Cada pago de Mercado Pago se registra una sola vez: `donations.mp_payment_id` es único y el webhook hace *upsert* por ese id, así los reintentos de Mercado Pago no duplican. Cada intento del fan lleva además un id propio (solo para trazabilidad), así dos pagos desde el mismo modal son dos aportes.
@@ -300,6 +301,12 @@ La migración `20261124030000_privacy_rejected_payments_tokens.sql`:
 * Agrega `donations.donor_name` (vacío si el aporte es anónimo) y deja leer al público solo las columnas no sensibles. Los moderadores ven los pagos con la función `admin_recent_payments`.
 * Agrega la tabla `rejected_payments` y la función `mark_rejected_payment_refunded`.
 * Agrega `register_device_token`, que asigna el token push al usuario de la sesión aunque el teléfono haya tenido otra cuenta.
+
+La migración `20261125010000_kiwi_commission.sql` agrega la comisión de KIWI:
+* `app_config.kiwi_commission_pct` (20 por defecto).
+* `donations.kiwi_fee`: lo calcula un trigger al registrar el aporte y queda fijo, así que si el porcentaje cambia, los aportes anteriores no se recalculan. El público no puede leerlo.
+* `band_balances` y el trigger de liquidaciones descuentan la comisión: la base no deja liquidarle a una banda más de lo que le corresponde.
+* `admin_recent_payments` devuelve la comisión de cada pago.
 
 ### Limitación conocida
 Los paneles se actualizan solos cuando entra un **aporte** (Realtime sobre `donations`). Las **liquidaciones** (`band_payouts`) no se escuchan en vivo: el panel del moderador se actualiza al registrarlas, y la banda ve la suya al recibir el push o al recargar su panel.

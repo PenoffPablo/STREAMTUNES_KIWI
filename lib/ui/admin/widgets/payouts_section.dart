@@ -82,16 +82,17 @@ class PayoutsSection extends StatelessWidget {
           Row(
             children: [
               total('Recaudado', viewModel.totalCollected),
-              total('Comisión MP', viewModel.totalFees),
+              total('KIWI ${viewModel.kiwiCommissionPct}%', viewModel.totalKiwiFee, color: AppTheme.accentOrange),
               total('Ya liquidado', viewModel.totalPaid),
-              total('KIWI debe', viewModel.totalPending, color: AppTheme.primary),
+              total('A liquidar', viewModel.totalPending, color: AppTheme.primary),
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Solo cuentan pagos verificados por Mercado Pago. Lo que KIWI debe es el neto '
-            '(descontada la comisión) menos lo ya liquidado.',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          Text(
+            'Solo cuentan pagos verificados por Mercado Pago. A cada banda le corresponde el neto '
+            '(descontada la comisión de MP) menos el ${viewModel.kiwiCommissionPct}% de KIWI, '
+            'menos lo ya liquidado.',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
           ),
 
           // Pagos cobrados que no se pudieron registrar: hay que devolverlos.
@@ -141,9 +142,9 @@ class PayoutsSection extends StatelessWidget {
                 title: Text(b.bandName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: Text(
                   'Recaudó ${_money(b.collected)} · neto ${_money(b.netCollected)} · '
-                  'liquidado ${_money(b.paid)}'
+                  'KIWI ${viewModel.kiwiCommissionPct}% ${_money(b.kiwiFee)} · liquidado ${_money(b.paid)}'
                   '${b.lastPayoutAt != null ? ' (último ${b.lastPayoutAt!.toLocal().day}/${b.lastPayoutAt!.toLocal().month})' : ''}\n'
-                  'KIWI le debe: ${_money(b.pending)}',
+                  'Le corresponde: ${_money(b.pending)}',
                   style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                 ),
                 isThreeLine: true,
@@ -184,7 +185,7 @@ class PayoutsSection extends StatelessWidget {
                       children: [
                         Text(_money(d.amountArs), style: const TextStyle(fontWeight: FontWeight.bold)),
                         Text(
-                          'neto ${_money(d.netOrAmount)}',
+                          'neto ${_money(d.netOrAmount)} · banda ${_money(d.bandShare)}',
                           style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                         ),
                       ],

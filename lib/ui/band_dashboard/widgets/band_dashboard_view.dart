@@ -258,7 +258,11 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                       const SizedBox(height: 8),
                     ],
                     if (_viewModel!.balance != null) ...[
-                      KiwiAccountCard(balance: _viewModel!.balance!, payouts: _viewModel!.payouts),
+                      KiwiAccountCard(
+                        balance: _viewModel!.balance!,
+                        payouts: _viewModel!.payouts,
+                        commissionPct: sessionVM.config.kiwiCommissionPct,
+                      ),
                       const SizedBox(height: 16),
                     ],
 

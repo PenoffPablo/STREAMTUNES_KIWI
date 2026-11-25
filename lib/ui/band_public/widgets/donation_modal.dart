@@ -71,6 +71,7 @@ class _DonationModalState extends State<DonationModal> {
 
   Widget _buildContent(BuildContext context) {
     final vm = _vm;
+    final commissionPct = SessionScope.read(context).config.kiwiCommissionPct;
 
     return Container(
       padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
@@ -177,10 +178,16 @@ class _DonationModalState extends State<DonationModal> {
                   ),
                   const SizedBox(height: 4),
                   _row(
-                    'Neto estimado para la banda:',
+                    'Neto después de Mercado Pago:',
                     '\$${vm.netBandAmount.toStringAsFixed(2)} ARS',
                     bold: true,
                     highlight: true,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'De ese neto, el ${100 - commissionPct}% es para la banda y el '
+                    '$commissionPct% sostiene StreamTunes.',
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                   ),
                 ],
               ),

@@ -52,7 +52,7 @@ class AdminModerationViewModel extends ViewModel {
   /// Estado de cuenta de todas las bandas, mayor saldo a liquidar primero.
   List<BandBalance> get balances => List.unmodifiable(_balances);
 
-  /// Total que KIWI le debe hoy a todas las bandas.
+  /// Total que KIWI le debe hoy a todas las bandas (ya descontada su comisión).
   double get totalPending => _balances.fold(0, (sum, b) => sum + (b.hasPending ? b.pending : 0));
 
   bool isPaying(String bandId) => _payingBandId == bandId;
@@ -74,6 +74,16 @@ class AdminModerationViewModel extends ViewModel {
   double get totalCollected => _balances.fold(0, (sum, b) => sum + b.collected);
   double get totalFees => _balances.fold(0, (sum, b) => sum + b.mercadoPagoFees);
   double get totalPaid => _balances.fold(0, (sum, b) => sum + b.paid);
+  double get totalNet => _balances.fold(0, (sum, b) => sum + b.netCollected);
+
+  /// Lo que KIWI retuvo para sostener la app (comisión sobre el neto).
+  double get totalKiwiFee => _balances.fold(0, (sum, b) => sum + b.kiwiFee);
+
+  /// Lo que les corresponde a las bandas en total (liquidado o no).
+  double get totalBandShare => _balances.fold(0, (sum, b) => sum + b.bandShare);
+
+  /// Porcentaje de la comisión de KIWI (para mostrarlo en el panel).
+  int get kiwiCommissionPct => _config.kiwiCommissionPct;
 
   /// Carga el panel y se suscribe a los pagos en vivo: cada vez que el webhook
   /// aprueba un aporte, se recalculan los saldos y la lista de pagos sin que el

@@ -154,17 +154,21 @@ void main() {
       payoutsRepo: payouts,
     );
 
-    test('el moderador ve cuánto debe KIWI y registra un pago que baja el saldo', () async {
+    test('el moderador ve cuánto debe KIWI (ya sin su comisión) y registra un pago que baja el saldo', () async {
       final payouts = FakePayoutsRepository(collected: {_bandId: (name: 'Los Fuzzers', gross: 5000, net: 4700)});
       final vm = admin(payouts);
       addTearDown(vm.dispose);
       await vm.loadModerationData();
-      expect(vm.totalPending, 4700);
+      // Neto 4700 - 20% de KIWI (940) = 3760 para la banda.
+      expect(vm.totalKiwiFee, 940);
+      expect(vm.totalPending, 3760);
+      expect(vm.totalBandShare, 3760);
 
-      expect(await vm.registerPayout(bandId: _bandId, amount: 4700, reference: 'OP-99'), isTrue);
+      expect(await vm.registerPayout(bandId: _bandId, amount: 3760, reference: 'OP-99'), isTrue);
 
       expect(vm.totalPending, 0);
-      expect(vm.balances.single.paid, 4700);
+      expect(vm.balances.single.paid, 3760);
+      expect(vm.totalKiwiFee, 940, reason: 'la comisión de KIWI no cambia al liquidar');
       expect(vm.isPaying(_bandId), isFalse);
     });
 
@@ -174,9 +178,11 @@ void main() {
       addTearDown(vm.dispose);
       await vm.loadModerationData();
 
-      expect(await vm.registerPayout(bandId: _bandId, amount: 1000), isFalse);
+      // Neto 940: a la banda le corresponden 752 (el 20% es de KIWI). No se
+      // puede liquidarle el neto entero.
+      expect(await vm.registerPayout(bandId: _bandId, amount: 940), isFalse);
       expect(vm.payoutError, contains('supera el saldo pendiente'));
-      expect(vm.totalPending, 940, reason: 'el saldo no cambia');
+      expect(vm.totalPending, 752, reason: 'el saldo no cambia');
     });
   });
 

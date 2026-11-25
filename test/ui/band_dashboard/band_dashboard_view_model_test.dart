@@ -208,8 +208,10 @@ void main() {
       expect(b.collected, 10000);
       expect(b.netCollected, 9400);
       expect(b.mercadoPagoFees, 600);
+      expect(b.kiwiFee, 1880, reason: '20% del neto para sostener la app');
+      expect(b.bandShare, 7520);
       expect(b.paid, 4000);
-      expect(b.pending, 5400);
+      expect(b.pending, 3520);
       expect(vm.payouts.single.reference, 'OP-1');
     });
   });

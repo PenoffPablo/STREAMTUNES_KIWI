@@ -16,6 +16,7 @@
 --   * 20261124020000_payment_idempotency.sql  (un pago de MP = un aporte)
 --   * 20261124030000_privacy_rejected_payments_tokens.sql (aportes anónimos,
 --     pagos a devolver y registro de tokens push)
+--   * 20261125010000_kiwi_commission.sql      (comisión de KIWI: 20% del neto)
 --
 -- No incluye objetos administrados por Supabase (esquemas auth/storage,
 -- event trigger `rls_auto_enable`) ni la tabla `usuarios`, que existe en la
