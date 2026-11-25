@@ -308,6 +308,10 @@ La migración `20261125010000_kiwi_commission.sql` agrega la comisión de KIWI:
 * `band_balances` y el trigger de liquidaciones descuentan la comisión: la base no deja liquidarle a una banda más de lo que le corresponde.
 * `admin_recent_payments` devuelve la comisión de cada pago.
 
+La migración `20261125020000_spend_cap_and_webhook_retry.sql`:
+* Agrega `set_spend_cap`: el freno de emergencia se guarda en la base. Solo la puede usar un moderador y solo cambia esa clave (`app_config` sigue siendo de solo lectura para la app).
+* `validate_donation` deja pasar un pago de Mercado Pago que ya estaba registrado: si MP reenvía el aviso y la banda fue suspendida mientras tanto, el reintento ya no aparece como "pago a devolver".
+
 ### Limitación conocida
 Los paneles se actualizan solos cuando entra un **aporte** (Realtime sobre `donations`). Las **liquidaciones** (`band_payouts`) no se escuchan en vivo: el panel del moderador se actualiza al registrarlas, y la banda ve la suya al recibir el push o al recargar su panel.
 

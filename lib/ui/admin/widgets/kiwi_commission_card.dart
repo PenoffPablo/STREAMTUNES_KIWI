@@ -81,14 +81,15 @@ class KiwiCommissionCard extends StatelessWidget {
           Text(
             'El $pct% de cada aporte (sobre lo que queda después de Mercado Pago) es para '
             'sostener StreamTunes: servidores, almacenamiento y la operación. No es ganancia '
-            'del equipo. Ya está descontado de lo que se le debe a cada banda.',
+            'del equipo. Ya está descontado de lo que se le debe a cada banda. Cada aporte '
+            'guarda la comisión con la que entró: si el porcentaje cambia, lo anterior no se recalcula.',
             style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
           const Divider(color: AppTheme.surfaceLight, height: 20),
           line('Aportes de los fans', _money(collected)),
           line('− Comisión de Mercado Pago', _money(mercadoPagoFees)),
           line('= Neto recibido', _money(net)),
-          line('− Comisión KIWI ($pct%)', _money(kiwiFee), color: AppTheme.accentOrange),
+          line('− Comisión KIWI', _money(kiwiFee), color: AppTheme.accentOrange),
           line('= Para las bandas', _money(bandShare), bold: true, color: AppTheme.primary),
         ],
       ),

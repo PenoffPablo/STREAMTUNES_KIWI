@@ -17,6 +17,8 @@
 --   * 20261124030000_privacy_rejected_payments_tokens.sql (aportes anónimos,
 --     pagos a devolver y registro de tokens push)
 --   * 20261125010000_kiwi_commission.sql      (comisión de KIWI: 20% del neto)
+--   * 20261125020000_spend_cap_and_webhook_retry.sql (freno de emergencia que se
+--     guarda y reintentos del webhook sin pagos a devolver falsos)
 --
 -- No incluye objetos administrados por Supabase (esquemas auth/storage,
 -- event trigger `rls_auto_enable`) ni la tabla `usuarios`, que existe en la

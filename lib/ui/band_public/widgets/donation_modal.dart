@@ -71,7 +71,7 @@ class _DonationModalState extends State<DonationModal> {
 
   Widget _buildContent(BuildContext context) {
     final vm = _vm;
-    final commissionPct = SessionScope.read(context).config.kiwiCommissionPct;
+    final commissionPct = SessionScope.of(context).config.kiwiCommissionPct;
 
     return Container(
       padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),

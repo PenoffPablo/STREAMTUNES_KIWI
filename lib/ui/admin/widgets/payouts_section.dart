@@ -82,7 +82,7 @@ class PayoutsSection extends StatelessWidget {
           Row(
             children: [
               total('Recaudado', viewModel.totalCollected),
-              total('KIWI ${viewModel.kiwiCommissionPct}%', viewModel.totalKiwiFee, color: AppTheme.accentOrange),
+              total('Comisión KIWI', viewModel.totalKiwiFee, color: AppTheme.accentOrange),
               total('Ya liquidado', viewModel.totalPaid),
               total('A liquidar', viewModel.totalPending, color: AppTheme.primary),
             ],
@@ -90,7 +90,7 @@ class PayoutsSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Solo cuentan pagos verificados por Mercado Pago. A cada banda le corresponde el neto '
-            '(descontada la comisión de MP) menos el ${viewModel.kiwiCommissionPct}% de KIWI, '
+            '(descontada la comisión de MP) menos la comisión de KIWI, '
             'menos lo ya liquidado.',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
           ),
@@ -142,7 +142,7 @@ class PayoutsSection extends StatelessWidget {
                 title: Text(b.bandName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: Text(
                   'Recaudó ${_money(b.collected)} · neto ${_money(b.netCollected)} · '
-                  'KIWI ${viewModel.kiwiCommissionPct}% ${_money(b.kiwiFee)} · liquidado ${_money(b.paid)}'
+                  'KIWI ${_money(b.kiwiFee)} · liquidado ${_money(b.paid)}'
                   '${b.lastPayoutAt != null ? ' (último ${b.lastPayoutAt!.toLocal().day}/${b.lastPayoutAt!.toLocal().month})' : ''}\n'
                   'Le corresponde: ${_money(b.pending)}',
                   style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),

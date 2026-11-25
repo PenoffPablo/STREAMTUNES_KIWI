@@ -29,10 +29,8 @@ class SupabaseConfigRepository implements ConfigRepository {
 
   @override
   Future<void> updateSpendCap(bool active) async {
-    await (_client
-            .from('app_config')
-            .update({'value': active ? '1' : '0'})
-            .eq('key', 'spend_cap_active'))
-        .withNetworkTimeout();
+    // app_config es de solo lectura para la app: el freno se cambia con una
+    // función que solo acepta esa clave y solo para moderadores.
+    await (_client.rpc('set_spend_cap', params: {'p_active': active})).withNetworkTimeout();
   }
 }

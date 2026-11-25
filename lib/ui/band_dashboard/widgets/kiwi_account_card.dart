@@ -74,8 +74,8 @@ class KiwiAccountCard extends StatelessWidget {
           Text(
             'Los fans pagan con Mercado Pago a la cuenta de KIWI. De lo recaudado '
             '(${_money(b.collected)}) se descuenta la comisión de Mercado Pago '
-            '(${_money(b.mercadoPagoFees)}) y el $commissionPct% de KIWI (${_money(b.kiwiFee)}), '
-            'que sostiene la app: servidores, almacenamiento y la operación.',
+            '(${_money(b.mercadoPagoFees)}) y la comisión de KIWI (${_money(b.kiwiFee)}; hoy es el '
+            '$commissionPct% del neto), que sostiene la app: servidores, almacenamiento y la operación.',
             style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
           ),
           if (payouts.isNotEmpty) ...[
