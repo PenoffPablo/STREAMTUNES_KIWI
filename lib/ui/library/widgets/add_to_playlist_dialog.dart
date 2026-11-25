@@ -39,15 +39,8 @@ class _AddToPlaylistDialogState extends State<AddToPlaylistDialog> {
       return AlertDialog(
         backgroundColor: AppTheme.surface,
         title: const Text('Inicia sesión'),
-        content: const Text(
-          'Para crear playlists y guardar tus temas favoritos necesitas una cuenta en StreamTunes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
-          ),
-        ],
+        content: const Text('Para crear playlists y guardar tus temas favoritos necesitas una cuenta en StreamTunes.'),
+        actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cerrar'))],
       );
     }
 
@@ -84,9 +77,7 @@ class _AddToPlaylistDialogState extends State<AddToPlaylistDialog> {
                     leading: const Icon(Icons.playlist_play, color: AppTheme.primary),
                     title: Text(pl.title, style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text('${pl.songIds.length} canciones'),
-                    trailing: isAlreadyIn
-                        ? const Icon(Icons.check, color: AppTheme.primary)
-                        : null,
+                    trailing: isAlreadyIn ? const Icon(Icons.check, color: AppTheme.primary) : null,
                     onTap: isAlreadyIn
                         ? null
                         : () async {
@@ -98,9 +89,7 @@ class _AddToPlaylistDialogState extends State<AddToPlaylistDialog> {
                               messenger.showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    success
-                                        ? 'Agregada a "${pl.title}"'
-                                        : 'No se pudo agregar a la playlist',
+                                    success ? 'Agregada a "${pl.title}"' : 'No se pudo agregar a la playlist',
                                   ),
                                 ),
                               );
@@ -128,10 +117,7 @@ class _AddToPlaylistDialogState extends State<AddToPlaylistDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
-                      onPressed: () => setState(() => _isCreating = false),
-                      child: const Text('Cancelar'),
-                    ),
+                    TextButton(onPressed: () => setState(() => _isCreating = false), child: const Text('Cancelar')),
                     ElevatedButton(
                       onPressed: () async {
                         final title = _newPlaylistController.text.trim();
@@ -159,13 +145,7 @@ class _AddToPlaylistDialogState extends State<AddToPlaylistDialog> {
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cerrar'),
-        ),
-      ],
+      actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cerrar'))],
     );
   }
 }
-

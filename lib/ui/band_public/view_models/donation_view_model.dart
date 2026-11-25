@@ -65,7 +65,6 @@ class DonationViewModel extends ViewModel {
   double get estimatedFee => _amount * kGatewayFeeRate;
   double get netBandAmount => (_amount - estimatedFee).clamp(0.0, double.infinity);
 
-
   void setAmountText(String text) {
     _amount = double.tryParse(text.replaceAll(',', '.')) ?? 0;
     notifyListeners();

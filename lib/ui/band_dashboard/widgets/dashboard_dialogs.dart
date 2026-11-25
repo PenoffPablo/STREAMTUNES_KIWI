@@ -3,13 +3,7 @@ import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 
 /// Datos que devuelve [AddEventDialog].
-typedef NewEventData = ({
-  String title,
-  String venue,
-  String city,
-  DateTime date,
-  String? ticketUrl,
-});
+typedef NewEventData = ({String title, String venue, String city, DateTime date, String? ticketUrl});
 
 /// Datos que devuelve [EditSongDialog].
 typedef SongEditData = ({String title, String genre, String? lyricsLrc});
@@ -78,13 +72,25 @@ class _AddEventDialogState extends State<AddEventDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: _title, decoration: const InputDecoration(labelText: 'Nombre del Evento *')),
+            TextField(
+              controller: _title,
+              decoration: const InputDecoration(labelText: 'Nombre del Evento *'),
+            ),
             const SizedBox(height: 10),
-            TextField(controller: _venue, decoration: const InputDecoration(labelText: 'Lugar / Venue *')),
+            TextField(
+              controller: _venue,
+              decoration: const InputDecoration(labelText: 'Lugar / Venue *'),
+            ),
             const SizedBox(height: 10),
-            TextField(controller: _city, decoration: const InputDecoration(labelText: 'Ciudad *')),
+            TextField(
+              controller: _city,
+              decoration: const InputDecoration(labelText: 'Ciudad *'),
+            ),
             const SizedBox(height: 10),
-            TextField(controller: _ticket, decoration: const InputDecoration(labelText: 'Link de Entradas (Opcional)')),
+            TextField(
+              controller: _ticket,
+              decoration: const InputDecoration(labelText: 'Link de Entradas (Opcional)'),
+            ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -110,8 +116,10 @@ class EditSongDialog extends StatefulWidget {
 
   final Song song;
 
-  static Future<SongEditData?> show(BuildContext context, Song song) =>
-      showDialog<SongEditData>(context: context, builder: (_) => EditSongDialog(song: song));
+  static Future<SongEditData?> show(BuildContext context, Song song) => showDialog<SongEditData>(
+    context: context,
+    builder: (_) => EditSongDialog(song: song),
+  );
 
   @override
   State<EditSongDialog> createState() => _EditSongDialogState();
@@ -147,9 +155,7 @@ class _EditSongDialogState extends State<EditSongDialog> {
       return;
     }
     final lyrics = _lyrics.text.trim();
-    Navigator.of(context).pop<SongEditData>(
-      (title: title, genre: genre, lyricsLrc: lyrics.isEmpty ? null : lyrics),
-    );
+    Navigator.of(context).pop<SongEditData>((title: title, genre: genre, lyricsLrc: lyrics.isEmpty ? null : lyrics));
   }
 
   @override
@@ -161,8 +167,12 @@ class _EditSongDialogState extends State<EditSongDialog> {
           const Icon(Icons.edit_note, color: AppTheme.primary),
           const SizedBox(width: 8),
           Expanded(
-            child: Text('Editar "${widget.song.title}"',
-                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
+            child: Text(
+              'Editar "${widget.song.title}"',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16),
+            ),
           ),
         ],
       ),
@@ -170,7 +180,10 @@ class _EditSongDialogState extends State<EditSongDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: _title, decoration: const InputDecoration(labelText: 'Título de la canción *')),
+            TextField(
+              controller: _title,
+              decoration: const InputDecoration(labelText: 'Título de la canción *'),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _genre,

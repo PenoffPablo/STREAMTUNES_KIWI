@@ -15,8 +15,10 @@ class PayoutDialog extends StatefulWidget {
 
   final BandBalance balance;
 
-  static Future<PayoutData?> show(BuildContext context, BandBalance balance) =>
-      showDialog<PayoutData>(context: context, builder: (_) => PayoutDialog(balance: balance));
+  static Future<PayoutData?> show(BuildContext context, BandBalance balance) => showDialog<PayoutData>(
+    context: context,
+    builder: (_) => PayoutDialog(balance: balance),
+  );
 
   @override
   State<PayoutDialog> createState() => _PayoutDialogState();
@@ -50,15 +52,13 @@ class _PayoutDialogState extends State<PayoutDialog> {
       return;
     }
     if (amount > widget.balance.pending + 0.001) {
-      setState(() => _error =
-          'Supera el saldo pendiente (\$${widget.balance.pending.toStringAsFixed(2)}).');
+      setState(() => _error = 'Supera el saldo pendiente (\$${widget.balance.pending.toStringAsFixed(2)}).');
       return;
     }
     final ref = _reference.text.trim();
     final note = _note.text.trim();
-    Navigator.of(context).pop<PayoutData>(
-      (amount: amount, reference: ref.isEmpty ? null : ref, note: note.isEmpty ? null : note),
-    );
+    Navigator.of(context)
+        .pop<PayoutData>((amount: amount, reference: ref.isEmpty ? null : ref, note: note.isEmpty ? null : note));
   }
 
   @override
@@ -97,8 +97,7 @@ class _PayoutDialogState extends State<PayoutDialog> {
               maxLength: 300,
               decoration: const InputDecoration(labelText: 'Nota (opcional)'),
             ),
-            if (_error != null)
-              Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
           ],
         ),
       ),

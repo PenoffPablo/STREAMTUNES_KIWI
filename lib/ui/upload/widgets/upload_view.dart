@@ -1,13 +1,14 @@
-import 'dart:io' show File;
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:streamtunes/domain/models/band.dart';
+import 'package:streamtunes/ui/upload/widgets/audio_picker_card.dart';
+import 'package:streamtunes/ui/upload/widgets/cover_picker_card.dart';
+import 'package:streamtunes/ui/upload/widgets/lyrics_field_card.dart';
+import 'package:streamtunes/ui/upload/widgets/upload_quota_card.dart';
 import 'package:streamtunes/ui/core/widgets/error_banner.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 import 'package:streamtunes/ui/upload/view_models/upload_view_model.dart';
 import 'package:streamtunes/ui/core/widgets/empty_state_view.dart';
-import 'package:streamtunes/ui/core/widgets/waveform_painter.dart';
 
 class UploadView extends StatefulWidget {
   const UploadView({super.key});
@@ -53,13 +54,41 @@ class _UploadViewState extends State<UploadView> {
     super.dispose();
   }
 
+  /// Valida el título y publica el tema (o lo deja en segundo plano).
+  Future<void> _publish(Band activeBand) async {
+    final title = _titleController.text.trim();
+    final duration = int.tryParse(_durationController.text) ?? 0;
+
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Por favor ingresa el título de la canción.')));
+      return;
+    }
+
+    final success = await _viewModel.publishSong(
+      bandId: activeBand.id,
+      bandName: activeBand.name,
+      title: title,
+      genre: _selectedGenre,
+      albumId: _selectedAlbumId,
+      lyricsLrc: _lyricsController.text.trim().isNotEmpty ? _lyricsController.text.trim() : null,
+      durationSeconds: duration,
+      runInBackground: _runInBackground,
+    );
+
+    if (success && mounted) {
+      _titleController.clear();
+      _lyricsController.clear();
+      _durationController.text = '180';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = _viewModel;
     final sessionVM = SessionScope.of(context);
     final user = sessionVM.currentUser;
     final activeBand = sessionVM.activeBand;
-    final hasCamera = vm.hasCamera;
     final isSpendCapActive = sessionVM.config.spendCapActive;
 
     // 1. Control de acceso: No autenticado
@@ -123,55 +152,7 @@ class _UploadViewState extends State<UploadView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Tarjeta de Cupos (X/20 temas y Y/2 álbumes)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: vm.hasReachedSongLimit ? AppTheme.errorRed : AppTheme.surfaceLight),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Column(
-                        children: [
-                          const Text(
-                            'CUPO DE CANCIONES',
-                            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${vm.songCount} / ${vm.maxSongs}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: vm.hasReachedSongLimit ? AppTheme.errorRed : AppTheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(height: 30, width: 1, color: AppTheme.surfaceLight),
-                      Column(
-                        children: [
-                          const Text(
-                            'CUPO DE ÁLBUMES/EPS',
-                            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${vm.albumCount} / ${vm.maxAlbums}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: vm.hasReachedAlbumLimit ? AppTheme.accentOrange : AppTheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                UploadQuotaCard(viewModel: vm),
                 const SizedBox(height: 16),
 
                 // Mensajes de Alerta o Error
@@ -201,82 +182,8 @@ class _UploadViewState extends State<UploadView> {
                   const SizedBox(height: 16),
                 ],
 
-                // 1. Selector de Audio y Análisis en Isolate
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.audiotrack, color: AppTheme.primary, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'ARCHIVO DE AUDIO (.MP3, .WAV, .M4A)',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Tamaño máximo: 50 MB. Se verificará firma SHA-256 y picos de onda en un Isolate pesado.',
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                      ),
-                      const SizedBox(height: 14),
-
-                      if (vm.isAnalyzing) ...[
-                        // Progreso real reportado por el isolate worker vía SendPort.
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${vm.analysisStage}... ${(vm.analysisProgress * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(color: AppTheme.primary, fontSize: 13),
-                              ),
-                            ),
-                            TextButton(onPressed: vm.cancelAnalysis, child: const Text('Cancelar')),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        LinearProgressIndicator(
-                          value: vm.analysisProgress,
-                          minHeight: 4,
-                          backgroundColor: AppTheme.surfaceLight,
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-                        ),
-                      ] else if (vm.analysisResult != null) ...[
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: AppTheme.primary, size: 22),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '${vm.selectedAudio?.name} (${vm.analysisResult!.format.toUpperCase()} • ${(vm.analysisResult!.byteLength / (1024 * 1024)).toStringAsFixed(1)} MB)',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                            ),
-                            TextButton(onPressed: () => vm.pickAndAnalyzeAudio(), child: const Text('Cambiar')),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 32,
-                          width: double.infinity,
-                          child: CustomPaint(
-                            painter: WaveformPainter(peaks: vm.analysisResult!.waveformPeaks, progress: 1.0),
-                          ),
-                        ),
-                      ] else ...[
-                        OutlinedButton.icon(
-                          onPressed: () => vm.pickAndAnalyzeAudio(),
-                          icon: const Icon(Icons.file_upload_outlined, color: AppTheme.primary),
-                          label: const Text('Seleccionar archivo de audio'),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                // 1. Audio: análisis en un worker isolate
+                AudioPickerCard(viewModel: vm),
                 const SizedBox(height: 16),
 
                 // 2. Metadatos del Tema
@@ -349,100 +256,12 @@ class _UploadViewState extends State<UploadView> {
                 ),
                 const SizedBox(height: 16),
 
-                // 3. Portada: Cámara nativa vs Galería
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'PORTADA DEL TEMA',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              width: 80,
-                              height: 80,
-                              color: AppTheme.surfaceLight,
-                              child: vm.selectedCoverPath != null && !kIsWeb
-                                  ? Image.file(File(vm.selectedCoverPath!), fit: BoxFit.cover)
-                                  : const Icon(Icons.image, size: 40, color: AppTheme.textSecondary),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (hasCamera) ...[
-                                  ElevatedButton.icon(
-                                    onPressed: () => vm.pickCoverPhoto(fromCamera: true),
-                                    icon: const Icon(Icons.camera_alt, size: 16),
-                                    label: const Text('Tomar con cámara'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.surfaceLight,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                ],
-                                OutlinedButton.icon(
-                                  onPressed: () => vm.pickCoverPhoto(fromCamera: false),
-                                  icon: const Icon(Icons.photo_library, size: 16),
-                                  label: const Text('Elegir de galería'),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                // 3. Portada: cámara nativa o galería
+                CoverPickerCard(viewModel: vm),
                 const SizedBox(height: 16),
 
-                // 4. Letra Sincronizada LRC
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(12)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.mic, color: AppTheme.primary, size: 18),
-                          SizedBox(width: 8),
-                          Text(
-                            'LETRA SINCRONIZADA LRC (OPCIONAL)',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Usa el formato estándar [mm:ss.xx] Verso para resaltar las palabras en el reproductor.',
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _lyricsController,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: '[00:15.20] El último tren se va perdiendo en la niebla\n[00:22.50] Luces de neón en la estación',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // 4. Letra sincronizada LRC
+                LyricsFieldCard(controller: _lyricsController),
                 const SizedBox(height: 16),
 
                 // Opción de subida en segundo plano con Workmanager
@@ -464,38 +283,7 @@ class _UploadViewState extends State<UploadView> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: vm.isUploading || vm.isAnalyzing
-                        ? null
-                        : () async {
-                            final title = _titleController.text.trim();
-                            final duration = int.tryParse(_durationController.text) ?? 0;
-
-                            if (title.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Por favor ingresa el título de la canción.')),
-                              );
-                              return;
-                            }
-
-                            final success = await vm.publishSong(
-                              bandId: activeBand.id,
-                              bandName: activeBand.name,
-                              title: title,
-                              genre: _selectedGenre,
-                              albumId: _selectedAlbumId,
-                              lyricsLrc: _lyricsController.text.trim().isNotEmpty
-                                  ? _lyricsController.text.trim()
-                                  : null,
-                              durationSeconds: duration,
-                              runInBackground: _runInBackground,
-                            );
-
-                            if (success && mounted) {
-                              _titleController.clear();
-                              _lyricsController.clear();
-                              _durationController.text = '180';
-                            }
-                          },
+                    onPressed: vm.isUploading || vm.isAnalyzing ? null : () => _publish(activeBand),
                     child: vm.isUploading
                         ? const Row(
                             mainAxisAlignment: MainAxisAlignment.center,

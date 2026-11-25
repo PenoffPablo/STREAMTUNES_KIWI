@@ -7,6 +7,11 @@ import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dar
 import 'package:streamtunes/ui/core/widgets/empty_state_view.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
 import 'package:streamtunes/ui/admin/widgets/payout_dialog.dart';
+import 'package:streamtunes/ui/admin/widgets/admin_section_header.dart';
+import 'package:streamtunes/ui/admin/widgets/payouts_section.dart';
+import 'package:streamtunes/ui/admin/widgets/pending_band_card.dart';
+import 'package:streamtunes/ui/admin/widgets/song_report_card.dart';
+import 'package:streamtunes/ui/admin/widgets/spend_cap_card.dart';
 
 class AdminModerationView extends StatefulWidget {
   const AdminModerationView({super.key});
@@ -73,83 +78,21 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                       const SizedBox(height: 12),
                     ],
                     // 1. Interruptor de Emergencia: Spend Cap
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: vm.config.spendCapActive ? AppTheme.accentOrange.withAlpha(50) : AppTheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: vm.config.spendCapActive ? AppTheme.accentOrange : AppTheme.surfaceLight,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.flash_on,
-                                color: vm.config.spendCapActive ? AppTheme.accentOrange : AppTheme.textSecondary,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'FRENO DE EMERGENCIA (SPEND CAP)',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Si una banda se viraliza y los costos de Supabase Storage se disparan, activa este interruptor para bloquear temporalmente nuevas subidas y streaming pesado.',
-                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                          ),
-                          const SizedBox(height: 10),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(
-                              vm.config.spendCapActive
-                                  ? 'FRENO ACTIVO (Tráfico bloqueado)'
-                                  : 'Freno inactivo (Operación normal)',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: vm.config.spendCapActive ? AppTheme.accentOrange : AppTheme.textPrimary,
-                              ),
-                            ),
-                            value: vm.config.spendCapActive,
-                            activeThumbColor: AppTheme.accentOrange,
-                            onChanged: (val) async {
-                              await vm.toggleSpendCap(val);
-                              sessionVM.loadConfig(); // Sincronizar en toda la app
-                            },
-                          ),
-                        ],
-                      ),
+                    SpendCapCard(
+                      active: vm.config.spendCapActive,
+                      onChanged: (val) async {
+                        await vm.toggleSpendCap(val);
+                        sessionVM.loadConfig(); // Sincronizar en toda la app
+                      },
                     ),
                     const SizedBox(height: 20),
 
                     // Liquidaciones: lo que KIWI cobró y le debe a cada banda
-                    _buildPayoutsSection(vm),
+                    PayoutsSection(viewModel: vm, onPay: _pay, onMarkRefunded: _markRefunded),
                     const SizedBox(height: 20),
 
                     // 2. Bandas Pendientes de Aprobación (Filtro anti-copyright y calidad)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'BANDAS PENDIENTES DE REVISIÓN',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.1,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          '${vm.pendingBands.length}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
-                        ),
-                      ],
-                    ),
+                    AdminSectionHeader(title: 'BANDAS PENDIENTES DE REVISIÓN', count: vm.pendingBands.length),
                     const SizedBox(height: 10),
                     if (vm.pendingBands.isEmpty)
                       const Card(
@@ -164,102 +107,16 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                         ),
                       )
                     else
-                      ...vm.pendingBands.map(
-                        (band) => Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Container(
-                                        width: 50,
-                                        height: 50,
-                                        color: AppTheme.surfaceLight,
-                                        child: band.coverUrl != null
-                                            ? Image.network(
-                                                band.coverUrl!,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (context, error, stackTrace) => const Icon(Icons.groups),
-                                              )
-                                            : const Icon(Icons.groups),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            band.name,
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                          ),
-                                          Text(
-                                            '${band.genre} • ${band.location ?? "Sin ubicación"}',
-                                            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                                          ),
-                                          Text(
-                                            'Slug: /band/${band.slug}',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: AppTheme.primary,
-                                              fontFamily: 'monospace',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (band.bio != null) ...[
-                                  const SizedBox(height: 8),
-                                  Text(band.bio!, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                                ],
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () => vm.rejectBand(band.id),
-                                      child: const Text('Rechazar', style: TextStyle(color: AppTheme.errorRed)),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    ElevatedButton(
-                                      onPressed: () => vm.approveBand(band.id),
-                                      child: const Text('Aprobar Banda'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
+                      for (final band in vm.pendingBands)
+                        PendingBandCard(
+                          band: band,
+                          onApprove: () => vm.approveBand(band.id),
+                          onReject: () => vm.rejectBand(band.id),
                         ),
-                      ),
                     const SizedBox(height: 20),
 
                     // 3. Reportes Comunitarios de Canciones
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'REPORTES COMUNITARIOS ABIERTOS',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.1,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          '${vm.openReports.length}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
-                        ),
-                      ],
-                    ),
+                    AdminSectionHeader(title: 'REPORTES COMUNITARIOS ABIERTOS', count: vm.openReports.length),
                     const SizedBox(height: 10),
                     if (vm.openReports.isEmpty)
                       const Card(
@@ -274,68 +131,12 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                         ),
                       )
                     else
-                      ...vm.openReports.map(
-                        (report) => Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.report_problem, color: AppTheme.accentOrange, size: 20),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Canción: "${report.songTitle ?? report.songId}"',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                if (report.bandName != null)
-                                  Text(
-                                    'Banda: ${report.bandName}',
-                                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                                  ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.surfaceLight,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    'Motivo: "${report.reason}"',
-                                    style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () => vm.dismissReport(report.id),
-                                      child: const Text('Desestimar'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    ElevatedButton(
-                                      onPressed: () => vm.resolveReport(report.id, hideSong: true),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppTheme.errorRed,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      child: const Text('Ocultar Canción'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
+                      for (final report in vm.openReports)
+                        SongReportCard(
+                          report: report,
+                          onDismiss: () => vm.dismissReport(report.id),
+                          onHideSong: () => vm.resolveReport(report.id, hideSong: true),
                         ),
-                      ),
                     const SizedBox(height: 80),
                   ],
                 ),
@@ -401,191 +202,4 @@ class _AdminModerationViewState extends State<AdminModerationView> {
   }
 
   static String _money(double v) => v == v.roundToDouble() ? '\$${v.toStringAsFixed(0)}' : '\$${v.toStringAsFixed(2)}';
-
-  static String _dateTime(DateTime d) {
-    final l = d.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${l.day}/${l.month} ${two(l.hour)}:${two(l.minute)}';
-  }
-
-  /// KIWI cobra todos los aportes en su cuenta de Mercado Pago. Acá el
-  /// moderador ve cuánto entró, cuánto le debe a cada banda y registra cada
-  /// transferencia. Se actualiza solo cuando entra un pago (realtime).
-  Widget _buildPayoutsSection(AdminModerationViewModel vm) {
-    final bandsWithMovement = vm.balances.where((b) => b.collected > 0 || b.paid > 0).toList();
-
-    Widget total(String label, double value, {Color? color}) => Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-          const SizedBox(height: 2),
-          Text(
-            _money(value),
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color),
-          ),
-        ],
-      ),
-    );
-
-    Widget sectionTitle(String text) => Padding(
-      padding: const EdgeInsets.only(top: 14, bottom: 4),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.1,
-          color: AppTheme.textSecondary,
-        ),
-      ),
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.surfaceLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.payments_outlined, color: AppTheme.primary),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'APORTES Y LIQUIDACIONES',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                ),
-              ),
-              IconButton(tooltip: 'Actualizar', icon: const Icon(Icons.refresh, size: 20), onPressed: vm.refreshMoney),
-            ],
-          ),
-
-          if (vm.moneyError != null) ...[
-            ErrorBanner(warning: true, message: vm.moneyError!, onRetry: vm.refreshMoney),
-            const SizedBox(height: 8),
-          ],
-
-          // Resumen general
-          Row(
-            children: [
-              total('Recaudado', vm.totalCollected),
-              total('Comisión MP', vm.totalFees),
-              total('Ya liquidado', vm.totalPaid),
-              total('KIWI debe', vm.totalPending, color: AppTheme.primary),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Solo cuentan pagos verificados por Mercado Pago. Lo que KIWI debe es el neto '
-            '(descontada la comisión) menos lo ya liquidado.',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-          ),
-
-          // Pagos cobrados que no se pudieron registrar: hay que devolverlos.
-          if (vm.pendingRefunds.isNotEmpty) ...[
-            sectionTitle('PAGOS A DEVOLVER (${_money(vm.totalToRefund)})'),
-            const Text(
-              'Mercado Pago los cobró pero no se pudieron registrar como aporte. Devolvé cada uno '
-              'desde Mercado Pago (Actividad → el pago → Devolver) y después marcalo acá.',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-            ),
-            for (final r in vm.pendingRefunds)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                leading: const Icon(Icons.undo, color: AppTheme.accentOrange),
-                title: Text(
-                  '${_money(r.amount)} · ${r.bandName ?? 'Sin banda'}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                subtitle: Text(
-                  '${r.reason}\nPago MP ${r.mpPaymentId} · ${_dateTime(r.createdAt)}',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                ),
-                isThreeLine: true,
-                trailing: vm.isRefunding(r.id)
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentOrange),
-                      )
-                    : TextButton(onPressed: () => _markRefunded(r), child: const Text('Ya lo devolví')),
-              ),
-          ],
-
-          // Saldo por banda
-          sectionTitle('SALDO POR BANDA'),
-          if (bandsWithMovement.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6),
-              child: Text('Todavía no hay aportes verificados.', style: TextStyle(color: AppTheme.textSecondary)),
-            )
-          else
-            for (final b in bandsWithMovement)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(b.bandName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text(
-                  'Recaudó ${_money(b.collected)} · neto ${_money(b.netCollected)} · '
-                  'liquidado ${_money(b.paid)}'
-                  '${b.lastPayoutAt != null ? ' (último ${b.lastPayoutAt!.toLocal().day}/${b.lastPayoutAt!.toLocal().month})' : ''}\n'
-                  'KIWI le debe: ${_money(b.pending)}',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                ),
-                isThreeLine: true,
-                trailing: vm.isPaying(b.bandId)
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
-                      )
-                    : b.hasPending
-                    ? ElevatedButton(onPressed: () => _pay(b), child: Text('Pagar ${_money(b.pending)}'))
-                    : const Icon(Icons.check_circle, color: AppTheme.primary),
-              ),
-
-          // Pagos recibidos
-          sectionTitle('ÚLTIMOS PAGOS RECIBIDOS'),
-          if (vm.recentPayments.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6),
-              child: Text('Todavía no entraron pagos.', style: TextStyle(color: AppTheme.textSecondary)),
-            )
-          else
-            for (final d in vm.recentPayments)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Row(
-                  children: [
-                    const Icon(Icons.arrow_downward, size: 16, color: AppTheme.primary),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        '${d.bandName ?? 'Banda'} · ${d.donorName}\n${_dateTime(d.createdAt)}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(_money(d.amountArs), style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text(
-                          'neto ${_money(d.netOrAmount)}',
-                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-        ],
-      ),
-    );
-  }
 }

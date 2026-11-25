@@ -75,7 +75,8 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
         body: const EmptyStateView(
           icon: Icons.library_music_outlined,
           title: 'Guarda tu Música Favorita',
-          description: 'Inicia sesión con tu cuenta para crear playlists personalizadas y seguir a tus bandas de cabecera.',
+          description:
+              'Inicia sesión con tu cuenta para crear playlists personalizadas y seguir a tus bandas de cabecera.',
         ),
       );
     }
@@ -152,21 +153,14 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
               leading: Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(8)),
                 child: const Icon(Icons.playlist_play, color: AppTheme.primary, size: 28),
               ),
               title: Text(pl.title, style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text('${pl.songIds.length} canciones guardadas'),
               trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (ctx) => PlaylistDetailView(playlist: pl),
-                  ),
-                );
+                Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => PlaylistDetailView(playlist: pl)));
               },
             ),
           );
@@ -225,9 +219,7 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
               subtitle: Text('${b.genre} • ${b.followerCount} seguidores'),
               trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (ctx) => BandPublicView(bandId: b.id)),
-                );
+                Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => BandPublicView(bandId: b.id)));
               },
             ),
           );
