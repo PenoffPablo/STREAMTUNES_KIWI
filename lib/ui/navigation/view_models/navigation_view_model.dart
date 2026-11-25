@@ -5,7 +5,7 @@ import 'package:streamtunes/data/services/device/deep_link_service.dart';
 import 'package:streamtunes/data/services/notifications/push_notification_service.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
-import 'package:streamtunes/ui/session/view_models/session_view_model.dart';
+import 'package:streamtunes/ui/account/view_models/session_view_model.dart';
 import 'package:streamtunes/utils/async_utils.dart';
 
 /// ViewModel del shell de navegación.

@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:streamtunes/config/dependencies.dart';
 import 'package:streamtunes/ui/library/view_models/library_view_model.dart';
 import 'package:streamtunes/ui/player/view_models/player_view_model.dart';
-import 'package:streamtunes/ui/session/view_models/session_view_model.dart';
+import 'package:streamtunes/ui/account/view_models/session_view_model.dart';
 
 /// Expone el contenedor de dependencias (raíz de composición) al árbol.
 ///

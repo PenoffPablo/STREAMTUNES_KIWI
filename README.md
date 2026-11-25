@@ -58,7 +58,7 @@ La app sigue **MVVM en capas**, con la estructura recomendada por la guía ofici
                  └── creados por la raíz de composición (config/dependencies.dart)
 ```
 
-* **View (`ui/<feature>/views`)**: solo dibuja el estado del ViewModel y le delega las acciones. **No importa nada de `data/`**: no toca repositorios, servicios, `url_launcher` ni `MethodChannel`.
+* **View (`ui/<feature>/widgets`: la pantalla y sus widgets)**: solo dibuja el estado del ViewModel y le delega las acciones. **No importa nada de `data/`**: no toca repositorios, servicios, `url_launcher` ni `MethodChannel`.
 * **ViewModel (`ui/<feature>/view_models`)**: estado y lógica de presentación. Todos heredan de `ViewModel` (`ui/core/view_model.dart`), que evita el error *"ChangeNotifier used after being disposed"* cuando un `await` termina después de que se cerró la pantalla.
 * **Repository (`data/repositories/<x>/`)**: una interfaz (`x_repository.dart`) y dos implementaciones en archivos separados: `x_repository_supabase.dart` (producción) y `x_repository_fake.dart` (offline y tests).
 * **Service (`data/services/`)**: acceso a plataforma (audio, cámara, deep links, notificaciones, isolates). Son **clases inyectables**, no métodos `static`.
@@ -201,9 +201,11 @@ lib/
 ├── ui/
 │   ├── core/                     # ViewModel base, scopes, tema, widgets compartidos
 │   └── <feature>/                # account, admin, band_dashboard, band_public, home,
-│       ├── view_models/          # library, navigation, player, session, upload
-│       └── views/
+│       │                         # library, navigation, player, upload
+│       ├── view_models/          # estado y lógica de presentación
+│       └── widgets/              # la pantalla (x_view.dart) y sus widgets/diálogos
 └── utils/                        # Timeouts, reintentos, errores, transformadores de Stream
+test/                             # Replica lib/: data/, ui/<feature>/, utils/
 supabase/
 ├── functions/                    # mercadopago-create-preference, mercadopago-webhook, send-push
 └── migrations/                   # device_tokens (push), integridad de donaciones

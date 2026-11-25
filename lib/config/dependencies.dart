@@ -50,7 +50,7 @@ import 'package:streamtunes/ui/library/view_models/library_view_model.dart';
 import 'package:streamtunes/ui/library/view_models/playlist_detail_view_model.dart';
 import 'package:streamtunes/ui/navigation/view_models/navigation_view_model.dart';
 import 'package:streamtunes/ui/player/view_models/player_view_model.dart';
-import 'package:streamtunes/ui/session/view_models/session_view_model.dart';
+import 'package:streamtunes/ui/account/view_models/session_view_model.dart';
 import 'package:streamtunes/ui/upload/view_models/upload_view_model.dart';
 
 /// Raíz de composición (Composition Root).

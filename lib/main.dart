@@ -9,9 +9,9 @@ import 'package:streamtunes/config/environment.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 import 'package:streamtunes/ui/library/view_models/library_view_model.dart';
-import 'package:streamtunes/ui/navigation/views/navigation_shell.dart';
+import 'package:streamtunes/ui/navigation/widgets/navigation_shell.dart';
 import 'package:streamtunes/ui/player/view_models/player_view_model.dart';
-import 'package:streamtunes/ui/session/view_models/session_view_model.dart';
+import 'package:streamtunes/ui/account/view_models/session_view_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

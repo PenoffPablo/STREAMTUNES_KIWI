@@ -32,10 +32,10 @@ Reportá cualquier error, warning o test fallido como hallazgo. Si no pudiste ej
 ## 3. Reglas del proyecto
 
 ### Arquitectura MVVM en capas (criterio C1)
-Estructura: `lib/config/` · `lib/domain/models/` · `lib/data/{repositories,services}/` · `lib/ui/<feature>/{view_models,views}/` · `lib/utils/`.
+Estructura: `lib/config/` · `lib/domain/models/` · `lib/data/{repositories,services}/` · `lib/ui/<feature>/{view_models,widgets}/` · `lib/utils/`.
 
-- **Las Views (`lib/ui/**/views/`, `lib/ui/core/widgets/`) NO importan nada de `package:streamtunes/data/`.** Detectalo con:
-  `grep -rn "package:streamtunes/data/" lib/ui/*/views lib/ui/core/widgets`
+- **Las Views (`lib/ui/**/widgets/`, `lib/ui/core/widgets/`) NO importan nada de `package:streamtunes/data/`.** Detectalo con:
+  `grep -rn "package:streamtunes/data/" lib/ui/*/widgets lib/ui/core/widgets`
 - Las Views no construyen ViewModels con repositorios: los piden a `DependenciesScope.of(context).createXxxViewModel(...)`.
 - Las Views no usan `url_launcher`, `MethodChannel`, `Supabase.instance` ni servicios directamente.
 - Los ViewModels extienden `ViewModel` (`lib/ui/core/view_model.dart`), no `ChangeNotifier` a secas.
