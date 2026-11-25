@@ -78,7 +78,15 @@ class SessionViewModel extends ViewModel {
           },
         );
     // Si el token FCM rota, se vuelve a registrar para el usuario actual.
-    _tokenRefreshSub = push?.onTokenRefresh.listen((token) => _saveToken(token));
+    _tokenRefreshSub = push?.onTokenRefresh.listen((token) async {
+      try {
+        await _saveToken(token);
+      } catch (e) {
+        // Sin red: se vuelve a registrar en el próximo inicio de sesión.
+        _pushRegisteredFor = null;
+        debugPrint('[SessionViewModel] No se pudo guardar el token renovado: $e');
+      }
+    });
     await loadConfig();
     unawaited(_syncPushRegistration());
   }

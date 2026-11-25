@@ -110,12 +110,13 @@ class AdminModerationViewModel extends ViewModel {
       final (bands, reports, config, _) = await (
         moderationRepo.getPendingBands(),
         moderationRepo.getOpenReports(),
-        configRepo.getConfig(),
+        _attempt(configRepo.getConfig, 'la configuración (freno de emergencia y comisión)'),
         _reloadMoney(),
       ).wait;
       _pendingBands = bands;
       _openReports = reports;
-      _config = config;
+      if (config.$1 != null) _config = config.$1!;
+      _errorMessage = config.$2;
     } catch (e) {
       _errorMessage = 'No se pudo cargar el panel de moderación. ${describeError(e)}';
     } finally {
@@ -247,13 +248,24 @@ class AdminModerationViewModel extends ViewModel {
     }
   }
 
+  bool _isSavingSpendCap = false;
+
+  /// Mientras se guarda el freno, el interruptor queda bloqueado (un doble
+  /// toque no manda dos cambios).
+  bool get isSavingSpendCap => _isSavingSpendCap;
+
   Future<void> toggleSpendCap(bool active) async {
+    if (_isSavingSpendCap) return;
+    _isSavingSpendCap = true;
+    _errorMessage = null;
+    notifyListeners();
     try {
       await configRepo.updateSpendCap(active);
       _config = _config.copyWith(spendCapActive: active);
-      notifyListeners();
     } catch (e) {
       _errorMessage = 'No se pudo cambiar el freno de emergencia. ${describeError(e)}';
+    } finally {
+      _isSavingSpendCap = false;
       notifyListeners();
     }
   }

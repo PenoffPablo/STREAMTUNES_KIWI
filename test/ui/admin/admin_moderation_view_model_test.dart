@@ -7,6 +7,7 @@ import 'package:streamtunes/data/repositories/config/config_repository_fake.dart
 import 'package:streamtunes/data/repositories/donations/donations_repository_fake.dart';
 import 'package:streamtunes/data/repositories/moderation/moderation_repository_fake.dart';
 import 'package:streamtunes/data/repositories/payouts/payouts_repository_fake.dart';
+import 'package:streamtunes/domain/models/app_config.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
 import 'package:streamtunes/domain/models/donation.dart';
 import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dart';
@@ -241,4 +242,52 @@ void main() {
       expect(vm.payoutError, contains('ya estaba marcado'));
     });
   });
+
+  group('Configuración y freno de emergencia', () {
+    test('si la config no carga, el panel carga igual y avisa (no muestra el freno apagado como dato)', () async {
+      final vm = AdminModerationViewModel(
+        moderationRepo: FakeModerationRepository(),
+        configRepo: _FailingConfig(),
+      );
+      addTearDown(vm.dispose);
+      await vm.loadModerationData();
+
+      expect(vm.isLoading, isFalse);
+      expect(vm.errorMessage, contains('la configuración'));
+      expect(vm.pendingBands, isNotNull);
+    });
+
+    test('un doble toque mientras se guarda el freno manda un solo cambio', () async {
+      final config = _SlowConfig();
+      final vm = AdminModerationViewModel(moderationRepo: FakeModerationRepository(), configRepo: config);
+      addTearDown(vm.dispose);
+
+      final first = vm.toggleSpendCap(true);
+      expect(vm.isSavingSpendCap, isTrue);
+      await vm.toggleSpendCap(true); // ignorado: ya se está guardando
+      config.gate.complete();
+      await first;
+
+      expect(config.updates, 1);
+      expect(vm.isSavingSpendCap, isFalse);
+      expect(vm.config.spendCapActive, isTrue);
+    });
+  });
+}
+
+class _FailingConfig extends FakeConfigRepository {
+  @override
+  Future<AppConfig> getConfig() async => throw const SocketException('Failed host lookup');
+}
+
+class _SlowConfig extends FakeConfigRepository {
+  final gate = Completer<void>();
+  int updates = 0;
+
+  @override
+  Future<void> updateSpendCap(bool active) async {
+    updates++;
+    await gate.future;
+    await super.updateSpendCap(active);
+  }
 }

@@ -181,6 +181,8 @@ class AudioPlayerService {
       await _player.play();
     } catch (e) {
       debugPrint('[AudioPlayerService] Error al reproducir audio: $e');
+      // Se propaga: el ViewModel decide cómo avisarle al usuario.
+      rethrow;
     }
   }
 

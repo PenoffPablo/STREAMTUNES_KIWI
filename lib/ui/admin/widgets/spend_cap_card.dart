@@ -6,7 +6,8 @@ class SpendCapCard extends StatelessWidget {
   const SpendCapCard({super.key, required this.active, required this.onChanged});
 
   final bool active;
-  final ValueChanged<bool> onChanged;
+  /// `null` mientras se guarda: el interruptor queda deshabilitado.
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {

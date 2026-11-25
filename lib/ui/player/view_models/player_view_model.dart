@@ -5,6 +5,7 @@ import 'package:streamtunes/data/services/audio/lrc_parser_service.dart';
 import 'package:streamtunes/domain/models/parsed_lrc.dart';
 import 'package:streamtunes/domain/models/song.dart';
 import 'package:streamtunes/ui/core/view_model.dart';
+import 'package:streamtunes/utils/async_utils.dart';
 
 /// Snapshot inmutable del progreso de reproducción.
 @immutable
@@ -48,6 +49,7 @@ class PlayerViewModel extends ViewModel {
   PlaybackProgress _progress = const PlaybackProgress();
 
   final _progressController = StreamController<PlaybackProgress>.broadcast();
+  final _errorController = StreamController<String>.broadcast();
   final List<StreamSubscription<dynamic>> _subs = [];
   bool _started = false;
 
@@ -79,6 +81,23 @@ class PlayerViewModel extends ViewModel {
             a.duration == b.duration &&
             a.buffered.inSeconds == b.buffered.inSeconds,
       );
+
+  /// Errores de reproducción (sin conexión, archivo que no carga...) ya
+  /// traducidos para el usuario. Es un evento puntual, no un estado: la View
+  /// lo muestra en un SnackBar una sola vez.
+  Stream<String> get errors => _errorController.stream;
+
+  /// Ejecuta un control del reproductor y, si falla, emite el error en
+  /// [errors] en lugar de dejarlo sin manejar (los toques de la UI no esperan
+  /// el Future).
+  Future<void> _run(Future<void> Function() action, String what) async {
+    try {
+      await action();
+    } catch (e) {
+      if (isDisposed || _errorController.isClosed) return;
+      _errorController.add('No se pudo $what. ${describeError(e)}');
+    }
+  }
 
   /// Se suscribe a los streams del servicio. Lo llama el dueño en `initState`.
   void init() {
@@ -122,8 +141,12 @@ class PlayerViewModel extends ViewModel {
       return;
     }
 
-    // El parseo de la letra corre en otro isolate con `compute`.
-    final future = _lyricsFuture = compute(LrcParserService.parse, lrc);
+    // El parseo de la letra corre en otro isolate con `compute`. Si la letra
+    // está mal formada, el tema se reproduce igual, sin letra.
+    final future = _lyricsFuture = compute(LrcParserService.parse, lrc).catchError((Object e) {
+      debugPrint('[PlayerViewModel] No se pudo leer la letra de "${song.title}": $e');
+      return const <LrcLine>[];
+    });
     final parsed = await future;
     // Si el usuario cambió de canción mientras tanto, el resultado viejo se descarta.
     if (isDisposed || _currentSong?.id != song.id) return;
@@ -147,13 +170,13 @@ class PlayerViewModel extends ViewModel {
   }
 
   Future<void> playSong(Song song, {List<Song>? queue}) =>
-      playerService.playSong(song, queue: queue);
+      _run(() => playerService.playSong(song, queue: queue), 'reproducir "${song.title}"');
 
   /// Reproduce una lista: en orden o mezclada.
   Future<void> playAll(List<Song> songs, {bool shuffle = false}) async {
     if (songs.isEmpty) return;
     final queue = shuffle ? (List<Song>.of(songs)..shuffle()) : songs;
-    await playerService.playSong(queue.first, queue: queue);
+    await playSong(queue.first, queue: queue);
   }
 
   /// Play/pausa si es la canción actual; si no, la reproduce con la cola dada.
@@ -162,10 +185,10 @@ class PlayerViewModel extends ViewModel {
     return playSong(song, queue: queue);
   }
 
-  Future<void> togglePlayPause() => playerService.togglePlayPause();
-  Future<void> seek(Duration pos) => playerService.seek(pos);
-  Future<void> skipToNext() => playerService.skipToNext();
-  Future<void> skipToPrevious() => playerService.skipToPrevious();
+  Future<void> togglePlayPause() => _run(playerService.togglePlayPause, 'pausar o reanudar el tema');
+  Future<void> seek(Duration pos) => _run(() => playerService.seek(pos), 'adelantar el tema');
+  Future<void> skipToNext() => _run(playerService.skipToNext, 'pasar al tema siguiente');
+  Future<void> skipToPrevious() => _run(playerService.skipToPrevious, 'volver al tema anterior');
 
   @override
   void dispose() {
@@ -173,6 +196,7 @@ class PlayerViewModel extends ViewModel {
       s.cancel();
     }
     _progressController.close();
+    _errorController.close();
     super.dispose();
   }
 }

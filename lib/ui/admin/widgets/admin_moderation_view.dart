@@ -81,10 +81,12 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                     // 1. Interruptor de Emergencia: Spend Cap
                     SpendCapCard(
                       active: vm.config.spendCapActive,
-                      onChanged: (val) async {
-                        await vm.toggleSpendCap(val);
-                        sessionVM.loadConfig(); // Sincronizar en toda la app
-                      },
+                      onChanged: vm.isSavingSpendCap
+                          ? null
+                          : (val) async {
+                              await vm.toggleSpendCap(val);
+                              await sessionVM.loadConfig(); // Sincronizar en toda la app
+                            },
                     ),
                     const SizedBox(height: 20),
 

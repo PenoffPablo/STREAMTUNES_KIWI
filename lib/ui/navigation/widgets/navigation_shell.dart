@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
+import 'package:streamtunes/ui/core/widgets/error_banner.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 import 'package:streamtunes/ui/account/widgets/account_view.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/band_dashboard_view.dart';
@@ -37,6 +38,7 @@ class NavigationShell extends StatefulWidget {
 class _NavigationShellState extends State<NavigationShell> {
   late final NavigationViewModel _viewModel;
   StreamSubscription<Band>? _openBandSub;
+  StreamSubscription<String>? _playerErrorSub;
 
   @override
   void initState() {
@@ -46,6 +48,14 @@ class _NavigationShellState extends State<NavigationShell> {
       ..init();
     // La View solo reacciona al stream: la resolución del link vive en el ViewModel.
     _openBandSub = _viewModel.openBandRequests.listen(_openBand);
+    // El reproductor es global: sus errores se muestran desde acá, que está
+    // montado mientras la app está abierta.
+    _playerErrorSub = PlayerScope.read(context).errors.listen(_showPlayerError);
+  }
+
+  void _showPlayerError(String message) {
+    if (!mounted) return;
+    showErrorSnackBar(context, title: 'Problema con la reproducción', message: message);
   }
 
   void _openBand(Band band) {
@@ -58,6 +68,7 @@ class _NavigationShellState extends State<NavigationShell> {
   @override
   void dispose() {
     _openBandSub?.cancel();
+    _playerErrorSub?.cancel();
     _viewModel.dispose();
     super.dispose();
   }

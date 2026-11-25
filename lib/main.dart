@@ -16,6 +16,17 @@ import 'package:streamtunes/ui/account/view_models/session_view_model.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 0. Red de seguridad: errores que ningún try/catch atrapó (un Future sin
+  //    await, un listen sin onError). Se registran en lugar de perderse.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('[FlutterError] ${details.exceptionAsString()}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[Error no manejado] $error\n$stack');
+    return true; // manejado: la app sigue funcionando
+  };
+
   // 1. Reproducción con pantalla bloqueada (solo móvil).
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     try {
