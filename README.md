@@ -89,7 +89,7 @@ La app sigue **MVVM en capas**, con la estructura recomendada por la guía ofici
 | `async*` / `yield` | `AudioAnalyzerService.analyzeWithProgress` |
 | `StreamController` con `onListen`/`onCancel` | canal realtime de donaciones (se abre y cierra según los oyentes) |
 | Isolate de larga vida con `SendPort`/`ReceivePort` | análisis de audio con progreso y **cancelación** |
-| `Isolate.run` | reporte CSV firmado del panel de banda |
+| `Isolate.run` | métricas del día del panel de banda (desglose por tema) |
 | `compute` | parseo de letras LRC |
 | Isolate en segundo plano | `Workmanager` y el handler de push en background |
 
@@ -109,7 +109,7 @@ El menú inferior y las secciones disponibles se adaptan estrictamente al contex
 * **Administrador / Moderador:** Panel de control de contenido con capacidad de revisión, aprobación y resolución de reportes de moderación.
 
 ### Panel de Control para Musicos (Dashboard)
-* **Métricas Diarias de Servidor:** Visualización de reproducciones totales, minutos globales acumulados y desempeño de los últimos 7 días mediante funciones almacenadas en PostgreSQL (`RPC`).
+* **Métricas del día:** reproducciones totales, minutos escuchados y últimos 7 días (funciones de PostgreSQL), más el rendimiento de cada tema (escuchas, minutos y % del total), calculado en un isolate con `Isolate.run`. Se calculan una vez por día de calendario y se renuevan a las 00:00: mientras tanto salen del caché local, y si el panel queda abierto, un temporizador las recalcula al cambiar el día.
 * **Ranking de Audiencia (Top 10 Fans):** Desglose ordenado de los usuarios con mayor tiempo de escucha, respetando configuraciones de privacidad (anonimización automática para oyentes con perfiles restringidos).
 * **Control de Saturación:** Límite estricto de una consulta pesada directa al servidor por día, con almacenamiento en caché local (`SharedPreferences`) para consultas recurrentes.
 * **Agenda de Conciertos:** Alta, baja y consulta de fechas de presentaciones en vivo con enlace a boleterías.
@@ -197,7 +197,7 @@ lib/
 │       ├── audio/                # Reproductor, analizador (worker isolate), LRC
 │       ├── device/               # Cámara/archivos, deep links, lanzador externo
 │       ├── notifications/        # Notificaciones locales, Workmanager, push (FCM)
-│       ├── reports/              # Reporte CSV firmado (Isolate.run)
+│       ├── reports/              # Métricas del día de la banda (Isolate.run)
 │       └── storage/              # Cola offline de follows
 ├── ui/
 │   ├── core/                     # ViewModel base, scopes, tema, widgets compartidos

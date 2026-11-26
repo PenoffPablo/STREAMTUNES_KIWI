@@ -64,7 +64,7 @@ Estructura: `lib/config/` · `lib/domain/models/` · `lib/data/{repositories,ser
 ### Streams e Isolates (criterio D3)
 - Toda suscripción se cancela y todo `StreamController` se cierra.
 - Datos de alta frecuencia (posición del reproductor) por `Stream` + `StreamBuilder`, no con `notifyListeners()` en cada tick.
-- La clausura de `Isolate.run`/`compute` no debe capturar `this` ni campos de un objeto: copiar a variables locales primero (ver `BandReportService`).
+- La clausura de `Isolate.run`/`compute` no debe capturar `this` ni campos de un objeto: copiar a variables locales primero (ver `BandMetricsService`).
 - Los mensajes entre isolates son datos simples (primitivos, listas, mapas, `Uint8List`). Los isolates y `ReceivePort` se cierran en `dispose`.
 - Para trabajo pesado en web hay fallback (no hay `Isolate.spawn`).
 

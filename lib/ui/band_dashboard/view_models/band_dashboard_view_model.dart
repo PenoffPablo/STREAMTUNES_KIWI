@@ -8,8 +8,9 @@ import 'package:streamtunes/data/repositories/donations/donations_repository.dar
 import 'package:streamtunes/data/repositories/payouts/payouts_repository.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository.dart';
 import 'package:streamtunes/data/services/device/device_capabilities_service.dart';
-import 'package:streamtunes/data/services/reports/band_report_service.dart';
+import 'package:streamtunes/data/services/reports/band_metrics_service.dart';
 import 'package:streamtunes/domain/models/band.dart';
+import 'package:streamtunes/domain/models/band_daily_report.dart';
 import 'package:streamtunes/domain/models/band_event.dart';
 import 'package:streamtunes/domain/models/band_photo.dart';
 import 'package:streamtunes/domain/models/band_stats.dart';
@@ -25,7 +26,10 @@ class BandDashboardViewModel extends ViewModel {
   final PayoutsRepository? payoutsRepo;
   final DonationsRepository? donationsRepo;
   final DeviceCapabilitiesService? deviceService;
-  final BandReportService reportService;
+  final BandMetricsService metricsService;
+
+  /// Reloj inyectable (tests): define el día y la hora del corte de las 00:00.
+  final DateTime Function() clock;
   final String bandId;
   final SharedPreferences? prefs;
 
@@ -43,15 +47,13 @@ class BandDashboardViewModel extends ViewModel {
   int _songCount = 0;
   bool _isLoading = false;
   bool _isLoadingMetrics = false;
-  bool _isExporting = false;
-  String? _exportSummary;
   String? _errorMessage;
 
-  // Control de cuota diaria (1 vez al día) para proteger recursos de base de datos y CPU
+  // Métricas del día: se calculan una vez por día de calendario y se renuevan
+  // a las 00:00 (protege la base y la CPU del teléfono).
+  BandDailyReport? _report;
   bool _isMetricsFromCache = false;
-  DateTime? _lastMetricsFetch;
-  Duration? _timeUntilNextRefresh;
-  bool _canExportToday = true;
+  Timer? _midnightTimer;
 
   BandDashboardViewModel({
     required this.bandsRepo,
@@ -60,9 +62,10 @@ class BandDashboardViewModel extends ViewModel {
     this.payoutsRepo,
     this.donationsRepo,
     this.deviceService,
-    this.reportService = const BandReportService(),
+    this.metricsService = const BandMetricsService(),
     this.prefs,
-  });
+    DateTime Function()? clock,
+  }) : clock = clock ?? DateTime.now;
 
   Band? get band => _band;
   BandAggregatedStats? get stats => _stats;
@@ -89,21 +92,23 @@ class BandDashboardViewModel extends ViewModel {
   int get songCount => _songCount;
   bool get isLoading => _isLoading;
   bool get isLoadingMetrics => _isLoadingMetrics;
-  bool get isExporting => _isExporting;
-  String? get exportSummary => _exportSummary;
   String? get errorMessage => _errorMessage;
 
+  /// Desglose por tema calculado en el isolate (null hasta que carga).
+  BandDailyReport? get report => _report;
+
+  /// `true` si las métricas de hoy salen del caché local (ya se calcularon hoy).
   bool get isMetricsFromCache => _isMetricsFromCache;
-  DateTime? get lastMetricsFetch => _lastMetricsFetch;
-  Duration? get timeUntilNextRefresh => _timeUntilNextRefresh;
-  bool get canExportToday => _canExportToday;
+
+  /// Cuánto falta para las 00:00, cuando se calculan las métricas del nuevo día.
+  Duration get timeUntilNextRefresh => _nextMidnight(clock()).difference(clock());
 
   Future<SharedPreferences> _getPrefs() async => prefs ?? await SharedPreferences.getInstance();
 
-  String get _metricsDateKey => 'last_metrics_date_$bandId';
+  String get _metricsDayKey => 'metrics_day_$bandId';
+  String get _reportKey => 'cached_report_$bandId';
   String get _statsKey => 'cached_stats_$bandId';
   String get _fansKey => 'cached_top_fans_$bandId';
-  String get _exportKey => 'last_export_date_$bandId';
 
   /// Carga el panel: datos livianos siempre + métricas pesadas (máx. 1 vez por día).
   Future<void> loadDashboard() async {
@@ -134,7 +139,6 @@ class BandDashboardViewModel extends ViewModel {
       _photos = List.of(photos);
       _songs = List.of(songs);
       _songCount = songs.length;
-      _canExportToday = !_isWithin24Hours(p.getString(_exportKey));
     } catch (e) {
       _errorMessage = 'No se pudo cargar el panel de tu banda. ${describeError(e)}';
     } finally {
@@ -143,13 +147,15 @@ class BandDashboardViewModel extends ViewModel {
     }
   }
 
-  /// Actualiza solo las métricas diarias (botón "actualizar").
-  Future<void> loadDailyMetrics({bool forceRefresh = false}) async {
+  /// Carga las métricas del día: si ya se calcularon hoy salen del caché; si
+  /// no, se consultan y se calculan. También lo dispara el corte de las 00:00
+  /// y el botón "Reintentar" cuando falló la carga.
+  Future<void> loadDailyMetrics() async {
     _isLoadingMetrics = true;
     _metricsError = null;
     notifyListeners();
     try {
-      await _loadMetrics(await _getPrefs(), forceRefresh: forceRefresh).withNetworkTimeout();
+      await _loadMetrics(await _getPrefs()).withNetworkTimeout();
     } catch (e) {
       _metricsError = 'No se pudieron actualizar las métricas. ${describeError(e)}';
     } finally {
@@ -161,7 +167,7 @@ class BandDashboardViewModel extends ViewModel {
   Future<void> _loadMetricsSafely(SharedPreferences p) async {
     _metricsError = null;
     try {
-      await _loadMetrics(p, forceRefresh: false);
+      await _loadMetrics(p);
     } catch (e) {
       _metricsError = 'No se pudieron cargar las métricas. ${describeError(e)}';
     }
@@ -193,54 +199,80 @@ class BandDashboardViewModel extends ViewModel {
     }
   }
 
-  bool _isWithin24Hours(String? isoDate) {
-    final date = isoDate != null ? DateTime.tryParse(isoDate) : null;
-    return date != null && DateTime.now().difference(date).inHours < 24;
-  }
+  /// Día de calendario local (aaaa-mm-dd).
+  static String _dayKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  /// Métricas con caché local de 24 h: si hay caché vigente no se consulta PostgreSQL.
-  Future<void> _loadMetrics(SharedPreferences p, {required bool forceRefresh}) async {
-    final now = DateTime.now();
-    final lastDate = DateTime.tryParse(p.getString(_metricsDateKey) ?? '');
+  static DateTime _nextMidnight(DateTime now) => DateTime(now.year, now.month, now.day + 1);
 
-    if (!forceRefresh && lastDate != null && now.difference(lastDate).inHours < 24) {
+  /// Métricas del día. Si ya se calcularon hoy, salen del caché local y no se
+  /// consulta PostgreSQL. Si no, se piden al servidor (totales y top fans) y el
+  /// desglose por tema se calcula en un isolate. Un fallo no se cachea: se
+  /// reintenta en la próxima carga.
+  Future<void> _loadMetrics(SharedPreferences p) async {
+    final now = clock();
+    final today = _dayKey(now);
+
+    if (p.getString(_metricsDayKey) == today) {
       final cached = _readCachedMetrics(p);
       if (cached != null) {
-        final (stats, fans) = cached;
-        _stats = stats;
-        _topFans = fans;
+        _stats = cached.$1;
+        _topFans = cached.$2;
+        _report = cached.$3;
         _isMetricsFromCache = true;
-        _lastMetricsFetch = lastDate;
-        _timeUntilNextRefresh = const Duration(hours: 24) - now.difference(lastDate);
+        _scheduleMidnightRefresh();
         return;
       }
     }
 
-    final (stats, fans) = await (bandsRepo.getBandAggregatedStats(bandId), bandsRepo.getBandTopFans(bandId)).wait;
+    final (stats, fans, songs) = await (
+      bandsRepo.getBandAggregatedStats(bandId),
+      bandsRepo.getBandTopFans(bandId),
+      songsRepo.getSongsByBand(bandId),
+    ).wait;
+    // Se copian a datos planos ANTES de cruzar al isolate.
+    final report = await metricsService.compute([
+      for (final s in songs) (title: s.title, durationSeconds: s.durationSeconds, playCount: s.playCount),
+    ]);
+    if (isDisposed) return;
+
     _stats = stats;
     _topFans = fans;
+    _report = report;
     _isMetricsFromCache = false;
-    _lastMetricsFetch = now;
-    _timeUntilNextRefresh = const Duration(hours: 24);
 
     await (
-      p.setString(_metricsDateKey, now.toIso8601String()),
+      p.setString(_metricsDayKey, today),
       p.setString(_statsKey, jsonEncode(stats.toJson())),
       p.setString(_fansKey, jsonEncode(fans.map((f) => f.toJson()).toList())),
+      p.setString(_reportKey, jsonEncode(report.toJson())),
     ).wait;
+    _scheduleMidnightRefresh();
   }
 
-  (BandAggregatedStats, List<TopFanStat>)? _readCachedMetrics(SharedPreferences p) {
+  /// A las 00:00 se calculan solas las métricas del nuevo día (si el panel
+  /// sigue abierto). El timer se cancela en `dispose`.
+  void _scheduleMidnightRefresh() {
+    _midnightTimer?.cancel();
+    if (isDisposed) return;
+    _midnightTimer = Timer(timeUntilNextRefresh + const Duration(seconds: 1), () {
+      if (!isDisposed) unawaited(loadDailyMetrics());
+    });
+  }
+
+  (BandAggregatedStats, List<TopFanStat>, BandDailyReport)? _readCachedMetrics(SharedPreferences p) {
     try {
       final statsStr = p.getString(_statsKey);
-      if (statsStr == null) return null;
+      final reportStr = p.getString(_reportKey);
+      if (statsStr == null || reportStr == null) return null;
       final stats = BandAggregatedStats.fromJson(jsonDecode(statsStr) as Map<String, dynamic>);
       final fans = (jsonDecode(p.getString(_fansKey) ?? '[]') as List)
           .map((item) => TopFanStat.fromJson(item as Map<String, dynamic>))
           .toList();
-      return (stats, fans);
+      final report = BandDailyReport.fromJson(jsonDecode(reportStr) as Map<String, dynamic>);
+      return (stats, fans, report);
     } catch (e) {
-      debugPrint('[BandDashboardViewModel] Caché de métricas corrupta, se reconsulta: $e');
+      debugPrint('[BandDashboardViewModel] Caché de métricas corrupta, se recalcula: $e');
       return null;
     }
   }
@@ -315,42 +347,6 @@ class BandDashboardViewModel extends ViewModel {
     }
   }
 
-  /// Genera el historial exportable (CSV firmado con SHA-256) en otro isolate.
-  /// Límite: 1 ejecución cada 24 h por banda para proteger recursos.
-  Future<void> exportHistoryInIsolate() async {
-    final p = await _getPrefs();
-    final lastExport = DateTime.tryParse(p.getString(_exportKey) ?? '');
-    if (lastExport != null && DateTime.now().difference(lastExport).inHours < 24) {
-      final hoursLeft = 24 - DateTime.now().difference(lastExport).inHours;
-      _errorMessage =
-          'Cuota diaria alcanzada: el reporte solo puede generarse 1 vez cada '
-          '24 horas. Disponible en $hoursLeft hs.';
-      notifyListeners();
-      return;
-    }
-
-    _isExporting = true;
-    _exportSummary = null;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      // Se copian a datos planos ANTES de cruzar al isolate.
-      final rows = [
-        for (final s in _songs) (title: s.title, durationSeconds: s.durationSeconds, playCount: s.playCount),
-      ];
-      final report = await reportService.generate(bandId: bandId, bandName: _band?.name ?? 'Banda', songs: rows);
-      _exportSummary = report.summary;
-      _canExportToday = false;
-      await p.setString(_exportKey, report.generatedAt.toIso8601String());
-    } catch (e) {
-      _errorMessage = 'No se pudo generar el reporte. ${describeError(e)}';
-    } finally {
-      _isExporting = false;
-      notifyListeners();
-    }
-  }
-
   /// Edita los metadatos de una canción subida por la banda (título, género, letra LRC)
   Future<bool> editSong({
     required String songId,
@@ -390,6 +386,7 @@ class BandDashboardViewModel extends ViewModel {
   @override
   void dispose() {
     _liveSub?.cancel();
+    _midnightTimer?.cancel();
     super.dispose();
   }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:streamtunes/domain/models/band_daily_report.dart';
 import 'package:streamtunes/domain/models/band_stats.dart';
 import 'package:streamtunes/ui/band_dashboard/view_models/band_dashboard_view_model.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 
-/// Métricas diarias del artista: botón para pedirlas (1 consulta por día),
-/// estado de carga y, cuando están, totales del servidor y top fans.
+/// Métricas del día: se calculan una vez por día y se renuevan a las 00:00.
+/// Muestra los totales del servidor, el desglose por tema (calculado en un
+/// isolate) y el top de fans.
 class DailyMetricsSection extends StatelessWidget {
   const DailyMetricsSection({super.key, required this.viewModel});
 
@@ -23,7 +25,7 @@ class DailyMetricsSection extends StatelessWidget {
               CircularProgressIndicator(color: AppTheme.primary),
               SizedBox(height: 12),
               Text(
-                'Cargando métricas consolidadas del servidor...',
+                'Calculando las métricas de hoy...',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               ),
             ],
@@ -66,7 +68,7 @@ class DailyMetricsSection extends StatelessWidget {
                     border: Border.all(color: AppTheme.primary.withAlpha(80)),
                   ),
                   child: const Text(
-                    '1 Consulta / Día',
+                    '1 vez por día',
                     style: TextStyle(color: AppTheme.primary, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -74,7 +76,8 @@ class DailyMetricsSection extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Consolidado de reproducciones totales, minutos de escucha, canciones más escuchadas y ranking de fans de la banda.',
+              'Todavía no se pudieron calcular las métricas de hoy: reproducciones, minutos, '
+              'rendimiento de cada tema y ranking de fans.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 14),
@@ -87,10 +90,10 @@ class DailyMetricsSection extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                onPressed: () => viewModel.loadDailyMetrics(),
+                onPressed: viewModel.loadDailyMetrics,
                 icon: const Icon(Icons.bar_chart, size: 20),
                 label: const Text(
-                  'Ver mis métricas diarias',
+                  'Calcular métricas de hoy',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ),
@@ -100,13 +103,14 @@ class DailyMetricsSection extends StatelessWidget {
       );
     }
 
+    final report = viewModel.report;
     return Column(
       children: [
-        ServerStatsCard(
-          stats: stats,
-          fromCache: viewModel.isMetricsFromCache,
-          hoursUntilRefresh: viewModel.timeUntilNextRefresh?.inHours ?? 0,
-        ),
+        ServerStatsCard(stats: stats, untilRefresh: viewModel.timeUntilNextRefresh),
+        if (report != null) ...[
+          const SizedBox(height: 16),
+          SongBreakdownCard(report: report),
+        ],
         const SizedBox(height: 16),
         TopFansCard(fans: viewModel.topFans),
       ],
@@ -116,11 +120,12 @@ class DailyMetricsSection extends StatelessWidget {
 
 /// Totales que calcula PostgreSQL (RPC band_aggregated_stats).
 class ServerStatsCard extends StatelessWidget {
-  const ServerStatsCard({super.key, required this.stats, required this.fromCache, required this.hoursUntilRefresh});
+  const ServerStatsCard({super.key, required this.stats, required this.untilRefresh});
 
   final BandAggregatedStats stats;
-  final bool fromCache;
-  final int hoursUntilRefresh;
+
+  /// Tiempo hasta las 00:00, cuando se calculan las métricas del nuevo día.
+  final Duration untilRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +139,7 @@ class ServerStatsCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'MÉTRICAS DEL SERVIDOR (POSTGRESQL RPC)',
+                'MÉTRICAS DE HOY',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -158,9 +163,7 @@ class ServerStatsCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            fromCache
-                ? 'Consolidado diario en caché local. Próxima actualización en $hoursUntilRefresh hs para evitar saturar el servidor colectivo.'
-                : 'Métricas consolidadas actualizadas hoy desde PostgreSQL.',
+            'Se calculan una vez por día. Se renuevan a las 00:00 (faltan ${_countdown(untilRefresh)}).',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
           ),
           const SizedBox(height: 12),
@@ -172,26 +175,6 @@ class ServerStatsCard extends StatelessWidget {
               _MetricTile('ÚLTIMOS 7 DÍAS', '${stats.last7DaysPlays}'),
             ],
           ),
-          if (stats.topSongs.isNotEmpty) ...[
-            const Divider(height: 24, color: AppTheme.surfaceLight),
-            const Text('Top 5 Canciones de la Banda:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            const SizedBox(height: 8),
-            ...stats.topSongs.map(
-              (s) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: Text(s.title, style: const TextStyle(fontSize: 13))),
-                    Text(
-                      '${s.playCount} plays',
-                      style: const TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -279,6 +262,96 @@ class _MetricTile extends StatelessWidget {
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
       ],
+    );
+  }
+}
+
+String _countdown(Duration d) {
+  final h = d.inHours;
+  final m = d.inMinutes % 60;
+  return h > 0 ? '$h h $m min' : '$m min';
+}
+
+/// Rendimiento de cada tema, calculado en un isolate: escuchas, minutos y qué
+/// parte del total representa.
+class SongBreakdownCard extends StatelessWidget {
+  const SongBreakdownCard({super.key, required this.report});
+
+  final BandDailyReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final top = report.topSong;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'RENDIMIENTO POR TEMA',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _MetricTile('PROMEDIO POR TEMA', report.averagePlaysPerSong.toStringAsFixed(1)),
+              _MetricTile('MINUTOS (ESTIMADO)', '${report.totalMinutes}'),
+              _MetricTile('SIN ESCUCHAS', '${report.songsWithoutPlays}'),
+            ],
+          ),
+          if (top != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Tema más escuchado: ${top.title} (${top.sharePct.toStringAsFixed(0)}% de las escuchas)',
+              style: const TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.bold),
+            ),
+          ],
+          const Divider(height: 24, color: AppTheme.surfaceLight),
+          if (report.songs.isEmpty)
+            const Text(
+              'Todavía no hay temas subidos.',
+              style: TextStyle(color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+            )
+          else
+            for (final s in report.songs)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(s.title, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                        ),
+                        Text(
+                          '${s.plays} escuchas · ${s.minutesListened} min',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: s.sharePct / 100,
+                        minHeight: 6,
+                        backgroundColor: AppTheme.surfaceLight,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
     );
   }
 }

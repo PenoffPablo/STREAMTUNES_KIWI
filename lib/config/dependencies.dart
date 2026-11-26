@@ -36,7 +36,7 @@ import 'package:streamtunes/data/services/device/device_capabilities_service.dar
 import 'package:streamtunes/data/services/device/external_launcher_service.dart';
 import 'package:streamtunes/data/services/notifications/background_upload_service.dart';
 import 'package:streamtunes/data/services/notifications/push_notification_service.dart';
-import 'package:streamtunes/data/services/reports/band_report_service.dart';
+import 'package:streamtunes/data/services/reports/band_metrics_service.dart';
 import 'package:streamtunes/data/services/storage/pending_follow_service.dart';
 import 'package:streamtunes/domain/models/app_user.dart';
 import 'package:streamtunes/domain/models/band.dart';
@@ -80,7 +80,7 @@ class AppDependencies {
     DeepLinkService? deepLinkService,
     ExternalLauncherService? launcherService,
     AudioAnalyzerService? audioAnalyzer,
-    this.reportService = const BandReportService(),
+    this.metricsService = const BandMetricsService(),
   })  : deviceService = deviceService ?? DeviceCapabilitiesService(),
         pendingFollowService = pendingFollowService ?? PendingFollowService(),
         notificationService = notificationService ?? BackgroundUploadService(),
@@ -173,7 +173,7 @@ class AppDependencies {
   final DeepLinkService deepLinkService;
   final ExternalLauncherService launcherService;
   final AudioAnalyzerService audioAnalyzer;
-  final BandReportService reportService;
+  final BandMetricsService metricsService;
   final PushNotificationService pushService;
 
   // ---- Fábricas de ViewModels ----
@@ -235,7 +235,7 @@ class AppDependencies {
         payoutsRepo: payoutsRepository,
         donationsRepo: donationsRepository,
         deviceService: deviceService,
-        reportService: reportService,
+        metricsService: metricsService,
         bandId: bandId,
       );
 

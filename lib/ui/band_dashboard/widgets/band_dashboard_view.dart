@@ -14,7 +14,6 @@ import 'package:streamtunes/ui/band_dashboard/widgets/dashboard_dialogs.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/band_qr_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/daily_metrics_section.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/events_card.dart';
-import 'package:streamtunes/ui/band_dashboard/widgets/export_history_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/kiwi_account_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/merch_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/photos_card.dart';
@@ -172,27 +171,6 @@ class _BandDashboardViewState extends State<BandDashboardView> {
     if (url != null) await _viewModel?.updateMerchUrl(url);
   }
 
-  Future<void> _exportHistory() async {
-    final vm = _viewModel;
-    if (vm == null) return;
-    await vm.exportHistoryInIsolate();
-    if (!mounted) return;
-    final summary = vm.exportSummary;
-    if (summary == null) {
-      _showResult(false, '', vm.errorMessage ?? 'No se pudo generar el reporte.');
-      return;
-    }
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Reporte generado'),
-        content: SelectableText(summary, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cerrar'))],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final sessionVM = SessionScope.of(context);
@@ -234,17 +212,11 @@ class _BandDashboardViewState extends State<BandDashboardView> {
                       ErrorBanner(
                         warning: true,
                         message: _viewModel!.metricsError!,
-                        onRetry: () => _viewModel!.loadDailyMetrics(forceRefresh: true),
+                        onRetry: _viewModel!.loadDailyMetrics,
                       ),
                       const SizedBox(height: 8),
                     ],
                     DailyMetricsSection(viewModel: _viewModel!),
-                    const SizedBox(height: 12),
-                    ExportHistoryCard(
-                      canExportToday: _viewModel!.canExportToday,
-                      isExporting: _viewModel!.isExporting,
-                      onExport: _exportHistory,
-                    ),
                     const SizedBox(height: 16),
 
                     // Estado de cuenta con KIWI (aportes cobrados y liquidaciones).

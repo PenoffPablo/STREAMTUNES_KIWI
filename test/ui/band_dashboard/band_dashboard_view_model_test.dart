@@ -86,8 +86,11 @@ class _FlakyBandsRepository extends FakeBandsRepository {
     return super.followBand(bandId, userId);
   }
 
+  int statsCalls = 0;
+
   @override
   Future<BandAggregatedStats> getBandAggregatedStats(String bandId) async {
+    statsCalls++;
     if (statsFail) throw Exception('timeout');
     return super.getBandAggregatedStats(bandId);
   }
@@ -190,9 +193,9 @@ void main() {
       expect(vm.errorMessage, isNull);
       expect(vm.metricsError, isNotNull);
       expect(
-        prefs.getString('last_metrics_date_$_bandId'),
+        prefs.getString('metrics_day_$_bandId'),
         isNull,
-        reason: 'un fallo no puede quedar cacheado 24 h como si fueran ceros',
+        reason: 'un fallo no puede quedar cacheado todo el día como si fueran ceros',
       );
     });
 
@@ -237,6 +240,57 @@ void main() {
       expect(vm.balance!.pending, 5400, reason: 'el saldo anterior sigue visible');
       expect(vm.accountError, contains('No se pudo actualizar tu saldo con KIWI'));
       expect(vm.accountError, contains('No hay conexión'));
+    });
+  });
+
+  group('Métricas del día (se renuevan a las 00:00)', () {
+    late DateTime now;
+    late _FlakyBandsRepository bands;
+
+    BandDashboardViewModel open() {
+      final vm = BandDashboardViewModel(
+        bandsRepo: bands,
+        songsRepo: FakeSongsRepository(),
+        bandId: _bandId,
+        prefs: prefs,
+        clock: () => now,
+      );
+      addTearDown(vm.dispose);
+      return vm;
+    }
+
+    setUp(() => bands = _FlakyBandsRepository());
+
+    test('el mismo día se muestran desde el caché: no se vuelven a calcular', () async {
+      now = DateTime(2026, 11, 26, 10);
+      final first = open();
+      await first.loadDashboard();
+      expect(bands.statsCalls, 1);
+      expect(first.isMetricsFromCache, isFalse);
+      expect(first.report, isNotNull, reason: 'el desglose por tema sale del isolate');
+
+      now = DateTime(2026, 11, 26, 23, 59);
+      final again = open();
+      await again.loadDashboard();
+      expect(bands.statsCalls, 1, reason: 'hasta las 00:00 no se consulta la base de nuevo');
+      expect(again.isMetricsFromCache, isTrue);
+      expect(again.report!.totalPlays, first.report!.totalPlays);
+    });
+
+    test('pasadas las 00:00 se calculan las métricas del nuevo día', () async {
+      now = DateTime(2026, 11, 26, 23, 50);
+      await open().loadDashboard();
+
+      now = DateTime(2026, 11, 27, 0, 1);
+      final nextDay = open();
+      await nextDay.loadDashboard();
+      expect(bands.statsCalls, 2, reason: 'es otro día de calendario, no importa que pasaron 11 minutos');
+      expect(nextDay.isMetricsFromCache, isFalse);
+    });
+
+    test('la cuenta regresiva apunta a la próxima medianoche', () {
+      now = DateTime(2026, 11, 26, 22, 30);
+      expect(open().timeUntilNextRefresh, const Duration(hours: 1, minutes: 30));
     });
   });
 }
