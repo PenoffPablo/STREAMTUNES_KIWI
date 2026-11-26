@@ -18,6 +18,10 @@ abstract class AuthRepository {
     String displayName,
   );
   Future<void> signOut();
+
+  /// Vuelve a leer el perfil y los roles de banda del usuario actual (por
+  /// ejemplo, después de registrar una banda) y lo emite en [authStateChanges].
+  Future<void> reloadProfile();
   Future<void> updateProfile({
     String? displayName,
     String? avatarUrl,

@@ -312,6 +312,13 @@ La migración `20261125020000_spend_cap_and_webhook_retry.sql`:
 * Agrega `set_spend_cap`: el freno de emergencia se guarda en la base. Solo la puede usar un moderador y solo cambia esa clave (`app_config` sigue siendo de solo lectura para la app).
 * `validate_donation` deja pasar un pago de Mercado Pago que ya estaba registrado: si MP reenvía el aviso y la banda fue suspendida mientras tanto, el reintento ya no aparece como "pago a devolver".
 
+La migración `20261126020000_band_registration_guards.sql` acompaña el registro de bandas desde la app:
+* El dueño de una banda ya no puede cambiar `status` (aprobarse a sí mismo), `donations_collected`, `created_by`, `id` ni `created_at`. Al crear una banda, la base la fuerza a `pending`, sin recaudación.
+* Solo las bandas **aprobadas** pueden subir temas, y el público solo ve temas de bandas aprobadas.
+
+### Registro de bandas
+En **Cuenta**, un usuario con cuenta y sin banda toca **Registrar mi banda** y completa nombre, género, ciudad, biografía y foto. La banda queda **en revisión**: aparece en el panel de moderación y, mientras tanto, el usuario ve "en revisión" (con el botón "¿Ya la aprobaron?"). Cuando un moderador la aprueba, se habilitan **Subir** y **Mi Banda**.
+
 ### Limitación conocida
 Los paneles se actualizan solos cuando entra un **aporte** (Realtime sobre `donations`). Las **liquidaciones** (`band_payouts`) no se escuchan en vivo: el panel del moderador se actualiza al registrarlas, y la banda ve la suya al recibir el push o al recargar su panel.
 

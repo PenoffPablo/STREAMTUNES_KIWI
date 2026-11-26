@@ -174,6 +174,13 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> reloadProfile() async {
+    final userId = _client.auth.currentSession?.user.id;
+    if (userId == null) return;
+    await _fetchFullProfile(userId);
+  }
+
+  @override
   Future<void> updateProfile({
     String? displayName,
     String? avatarUrl,

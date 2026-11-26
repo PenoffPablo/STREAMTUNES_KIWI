@@ -60,7 +60,16 @@ class SessionViewModel extends ViewModel {
 
   bool get isAuthenticated => _currentUser != null;
   bool get isAnonymous => _currentUser?.isAnonymous ?? true;
-  bool get isMusician => _currentUser?.hasAnyBand ?? false;
+  /// Músico = tiene una banda APROBADA. Una banda recién registrada queda
+  /// en revisión y todavía no habilita "Subir" ni "Mi Banda".
+  bool get isMusician => _activeBand?.isApproved ?? false;
+
+  /// Banda registrada que todavía no aprobó un moderador (o que fue
+  /// suspendida). `null` si no tiene banda o si ya está aprobada.
+  Band? get bandUnderReview => (_activeBand != null && !_activeBand!.isApproved) ? _activeBand : null;
+
+  /// Puede registrar una banda: usuario con cuenta (no anónimo) y sin banda.
+  bool get canRegisterBand => _currentUser != null && !_currentUser!.isAnonymous && !_currentUser!.hasAnyBand;
   bool get isAdmin => _currentUser?.isAdmin ?? false;
 
   /// Inicialización explícita (no en el constructor): la llama el dueño del
@@ -129,13 +138,36 @@ class SessionViewModel extends ViewModel {
     await deviceTokens!.saveToken(userId: user.id, token: token, platform: push!.platform);
   }
 
+  /// Banda activa: la primera APROBADA; si no tiene ninguna aprobada, la
+  /// primera que encuentre (para mostrar que está en revisión).
   Future<Band?> _loadFirstBand(AppUser? user) async {
     if (user == null || !user.hasAnyBand) return null;
+    Band? fallback;
+    for (final bandId in user.bandRoles.keys) {
+      try {
+        final band = await bandsRepo.getBandById(bandId);
+        if (band == null) continue;
+        if (band.isApproved) return band;
+        fallback ??= band;
+      } catch (e) {
+        debugPrint('[SessionViewModel] No se pudo cargar la banda $bandId: $e');
+      }
+    }
+    return fallback;
+  }
+
+  /// Vuelve a leer el usuario y su banda: después de registrar una banda, o
+  /// para ver si un moderador ya la aprobó.
+  Future<void> refreshUser() async {
     try {
-      return await bandsRepo.getBandById(user.bandRoles.keys.first);
+      await authRepo.reloadProfile();
+      final user = authRepo.currentUser;
+      _currentUser = user;
+      _activeBand = await _loadFirstBand(user);
+      notifyListeners();
     } catch (e) {
-      debugPrint('[SessionViewModel] No se pudo cargar la banda activa: $e');
-      return null;
+      _errorMessage = 'No se pudo actualizar tu cuenta. ${describeError(e)}';
+      notifyListeners();
     }
   }
 

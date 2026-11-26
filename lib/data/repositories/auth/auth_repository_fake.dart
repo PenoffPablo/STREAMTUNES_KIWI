@@ -22,6 +22,19 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Stream<void> get sessionExpired => _expiredController.stream;
 
+  @override
+  Future<void> reloadProfile() async {
+    if (_user != null) _controller.add(_user);
+  }
+
+  /// Le da al usuario actual un rol en una banda (simula el trigger
+  /// `on_band_created` de la base, para el modo offline y los tests).
+  void grantBandRole(String bandId, {String role = 'owner'}) {
+    final user = _user;
+    if (user == null) return;
+    _user = user.copyWith(bandRoles: {...user.bandRoles, bandId: role});
+  }
+
   /// Simula una sesión que venció y no se pudo renovar (para tests).
   void expireSession() {
     _user = null;

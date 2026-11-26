@@ -5,6 +5,7 @@ import 'package:streamtunes/ui/account/view_models/session_view_model.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 import 'package:streamtunes/ui/admin/widgets/admin_moderation_view.dart';
+import 'package:streamtunes/ui/account/widgets/band_status_card.dart';
 
 class AccountView extends StatefulWidget {
   const AccountView({super.key});
@@ -187,7 +188,9 @@ class _AccountViewState extends State<AccountView> {
                     Text(
                       user.isAdmin
                           ? 'Moderador del Colectivo'
-                          : (user.hasAnyBand ? 'Músico Independiente' : 'Oyente de la Comunidad'),
+                          : (sessionVM.isMusician
+                                ? 'Músico Independiente'
+                                : (sessionVM.bandUnderReview != null ? 'Banda en revisión' : 'Oyente de la Comunidad')),
                       style: const TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ],
@@ -235,6 +238,15 @@ class _AccountViewState extends State<AccountView> {
           ),
         ),
         const SizedBox(height: 16),
+
+        // Registrar una banda / estado de la banda en revisión
+        if (sessionVM.canRegisterBand || sessionVM.bandUnderReview != null) ...[
+          BandStatusCard(
+            bandUnderReview: sessionVM.bandUnderReview,
+            onRefresh: sessionVM.refreshUser,
+          ),
+          const SizedBox(height: 16),
+        ],
 
         // Panel de Moderación para Admins
         if (user.isAdmin) ...[

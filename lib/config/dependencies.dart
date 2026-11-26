@@ -41,6 +41,7 @@ import 'package:streamtunes/data/services/storage/pending_follow_service.dart';
 import 'package:streamtunes/domain/models/app_user.dart';
 import 'package:streamtunes/domain/models/band.dart';
 import 'package:streamtunes/domain/models/playlist.dart';
+import 'package:streamtunes/ui/band_registration/view_models/band_registration_view_model.dart';
 import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dart';
 import 'package:streamtunes/ui/band_dashboard/view_models/band_dashboard_view_model.dart';
 import 'package:streamtunes/ui/band_public/view_models/band_public_view_model.dart';
@@ -238,6 +239,9 @@ class AppDependencies {
         metricsService: metricsService,
         bandId: bandId,
       );
+
+  BandRegistrationViewModel createBandRegistrationViewModel(SessionViewModel session) =>
+      BandRegistrationViewModel(bandsRepo: bandsRepository, session: session, deviceService: deviceService);
 
   UploadViewModel createUploadViewModel() => UploadViewModel(
         songsRepo: songsRepository,

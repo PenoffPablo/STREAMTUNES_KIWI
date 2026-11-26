@@ -84,24 +84,56 @@ class SupabaseBandsRepository implements BandsRepository {
     return Band.fromJson(res, followerCount: count);
   }
 
+  /// Registra una banda nueva. Nace PENDIENTE: la aprueba un moderador.
+  ///
+  /// * El creador queda como dueño por el trigger `on_band_created` (acá no
+  ///   se inserta en band_members: sería un duplicado).
+  /// * Si el slug ya existe se prueba con un sufijo (-2, -3...).
+  /// * Si [Band.coverUrl] es una ruta local, se sube la foto después de crear
+  ///   la banda (la carpeta del bucket es el id de la banda). Si falla, la
+  ///   banda queda registrada sin foto.
   @override
   Future<Band> createBand(Band band, String userId) async {
-    final payload = band.toJson()..remove('id');
-    payload['created_by'] = userId;
-    payload['status'] = 'pending'; // Nace en pending
+    final payload = <String, dynamic>{
+      'name': band.name.trim(),
+      'genre': band.genre,
+      'bio': band.bio,
+      'location': band.location,
+      'created_by': userId,
+      'status': 'pending',
+    };
 
-    final res = await (_client.from('bands').insert(payload).select().single())
-        .withNetworkTimeout();
-    final newBand = Band.fromJson(res);
+    Band? created;
+    for (var attempt = 1; created == null; attempt++) {
+      payload['slug'] = attempt == 1 ? band.slug : '${band.slug}-$attempt';
+      try {
+        final res = await (_client.from('bands').insert(payload).select().single()).withNetworkTimeout();
+        created = Band.fromJson(res);
+      } on PostgrestException catch (e) {
+        final slugTaken = e.code == '23505' && e.message.contains('slug');
+        if (!slugTaken || attempt >= 5) rethrow;
+      }
+    }
 
-    // Asignar al creador como 'owner' en band_members
-    await (_client.from('band_members').insert({
-      'band_id': newBand.id,
-      'user_id': userId,
-      'role': 'owner',
-    })).withNetworkTimeout();
-
-    return newBand;
+    final localCover = band.coverUrl;
+    if (localCover != null && localCover.isNotEmpty && !localCover.startsWith('http') && !kIsWeb) {
+      try {
+        final file = File(localCover);
+        if (file.existsSync()) {
+          final path = '${created.id}/band_cover_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          await (_client.storage
+                  .from('covers')
+                  .upload(path, file, fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg')))
+              .withNetworkTimeout(const Duration(seconds: 60));
+          final url = _client.storage.from('covers').getPublicUrl(path);
+          await (_client.from('bands').update({'cover_url': url}).eq('id', created.id)).withNetworkTimeout();
+          created = created.copyWith(coverUrl: url);
+        }
+      } catch (e) {
+        debugPrint('[SupabaseBandsRepository] Foto de la banda no subida, queda sin foto: $e');
+      }
+    }
+    return created!;
   }
 
   @override

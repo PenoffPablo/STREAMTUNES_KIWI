@@ -1,3 +1,19 @@
+/// Géneros que puede elegir una banda al registrarse.
+const List<String> kBandGenres = [
+  'Rock',
+  'Indie',
+  'Pop',
+  'Punk',
+  'Metal',
+  'Folk',
+  'Hip-Hop',
+  'Electrónica',
+  'Jazz',
+  'Cumbia',
+  'Reggae',
+  'Otro',
+];
+
 enum BandStatus {
   pending,
   approved,
