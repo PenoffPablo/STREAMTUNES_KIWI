@@ -60,14 +60,15 @@ class PendingBandCard extends StatelessWidget {
               Text(band.bio!, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
             ],
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 TextButton(
                   onPressed: () => onReject(),
                   child: const Text('Rechazar', style: TextStyle(color: AppTheme.errorRed)),
                 ),
-                const SizedBox(width: 8),
                 ElevatedButton(onPressed: () => onApprove(), child: const Text('Aprobar Banda')),
               ],
             ),

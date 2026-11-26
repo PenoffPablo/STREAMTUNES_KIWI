@@ -13,15 +13,18 @@ class AdminSectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.1,
-            color: AppTheme.textSecondary,
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
+              color: AppTheme.textSecondary,
+            ),
           ),
         ),
+        const SizedBox(width: 8),
         Text(
           '$count',
           style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),

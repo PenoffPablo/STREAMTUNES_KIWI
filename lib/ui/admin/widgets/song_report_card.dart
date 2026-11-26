@@ -44,11 +44,12 @@ class SongReportCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 TextButton(onPressed: () => onDismiss(), child: const Text('Desestimar')),
-                const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () => onHideSong(),
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed, foregroundColor: Colors.white),

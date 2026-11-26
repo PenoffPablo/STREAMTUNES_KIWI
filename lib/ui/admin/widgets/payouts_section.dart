@@ -22,11 +22,15 @@ class PayoutsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          Text(label, maxLines: 2, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
           const SizedBox(height: 2),
-          Text(
-            _money(value),
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _money(value),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color),
+            ),
           ),
         ],
       ),
@@ -104,20 +108,11 @@ class PayoutsSection extends StatelessWidget {
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
             ),
             for (final r in viewModel.pendingRefunds)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                leading: const Icon(Icons.undo, color: AppTheme.accentOrange),
-                title: Text(
-                  '${_money(r.amount)} · ${r.bandName ?? 'Sin banda'}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                subtitle: Text(
-                  '${r.reason}\nPago MP ${r.mpPaymentId} · ${_dateTime(r.createdAt)}',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                ),
-                isThreeLine: true,
-                trailing: viewModel.isRefunding(r.id)
+              _MoneyRow(
+                icon: const Icon(Icons.undo, color: AppTheme.accentOrange, size: 20),
+                title: '${_money(r.amount)} · ${r.bandName ?? 'Sin banda'}',
+                subtitle: '${r.reason}\nPago MP ${r.mpPaymentId} · ${_dateTime(r.createdAt)}',
+                action: viewModel.isRefunding(r.id)
                     ? const SizedBox(
                         width: 22,
                         height: 22,
@@ -136,19 +131,14 @@ class PayoutsSection extends StatelessWidget {
             )
           else
             for (final b in bandsWithMovement)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(b.bandName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text(
-                  'Recaudó ${_money(b.collected)} · neto ${_money(b.netCollected)} · '
-                  'KIWI ${_money(b.kiwiFee)} · liquidado ${_money(b.paid)}'
-                  '${b.lastPayoutAt != null ? ' (último ${b.lastPayoutAt!.toLocal().day}/${b.lastPayoutAt!.toLocal().month})' : ''}\n'
-                  'Le corresponde: ${_money(b.pending)}',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                ),
-                isThreeLine: true,
-                trailing: viewModel.isPaying(b.bandId)
+              _MoneyRow(
+                title: b.bandName,
+                subtitle:
+                    ('Recaudó ${_money(b.collected)} · neto ${_money(b.netCollected)} · '
+                    'KIWI ${_money(b.kiwiFee)} · liquidado ${_money(b.paid)}'
+                    '${b.lastPayoutAt != null ? ' (último ${b.lastPayoutAt!.toLocal().day}/${b.lastPayoutAt!.toLocal().month})' : ''}\n'
+                    'Le corresponde: ${_money(b.pending)}'),
+                action: viewModel.isPaying(b.bandId)
                     ? const SizedBox(
                         width: 22,
                         height: 22,
@@ -180,19 +170,59 @@ class PayoutsSection extends StatelessWidget {
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(_money(d.amountArs), style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text(
-                          'neto ${_money(d.netOrAmount)} · banda ${_money(d.bandShare)}',
-                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(_money(d.amountArs), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            'neto ${_money(d.netOrAmount)}\nbanda ${_money(d.bandShare)}',
+                            textAlign: TextAlign.end,
+                            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fila de la sección de dinero: texto arriba y la acción (pagar, devolver)
+/// debajo, alineada a la derecha. A diferencia de un ListTile, un botón con
+/// un monto largo nunca se queda sin lugar.
+class _MoneyRow extends StatelessWidget {
+  const _MoneyRow({required this.title, required this.subtitle, required this.action, this.icon});
+
+  final String title;
+  final String subtitle;
+  final Widget action;
+  final Widget? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (icon != null) ...[Padding(padding: const EdgeInsets.only(top: 2), child: icon), const SizedBox(width: 8)],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                Align(alignment: Alignment.centerRight, child: action),
+              ],
+            ),
+          ),
         ],
       ),
     );

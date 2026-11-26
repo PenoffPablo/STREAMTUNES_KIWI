@@ -64,7 +64,7 @@ class _AdminModerationViewState extends State<AdminModerationView> {
               children: [
                 Icon(Icons.shield, color: AppTheme.primary, size: 22),
                 SizedBox(width: 8),
-                Text('Panel de Moderación del Colectivo'),
+                Expanded(child: Text('Moderación', overflow: TextOverflow.ellipsis)),
               ],
             ),
             actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => vm.loadModerationData())],

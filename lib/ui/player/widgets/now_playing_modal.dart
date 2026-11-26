@@ -26,26 +26,51 @@ class _NowPlayingModalState extends State<NowPlayingModal> {
   final ScrollController _lyricsScrollController = ScrollController();
   int _lastAutoScrolledIndex = -1;
 
+  /// Clave de la línea que se está cantando: permite centrarla según su
+  /// tamaño REAL (las líneas largas ocupan dos renglones y la activa usa letra
+  /// más grande). Antes se suponían 42 px fijos por línea y el error se
+  /// acumulaba: la letra bajaba de más a medida que avanzaba la canción.
+  final GlobalKey _activeLineKey = GlobalKey();
+
+  /// Alto del recuadro de la letra y margen arriba/abajo para que la primera
+  /// y la última línea también puedan quedar en el centro.
+  static const double _lyricsBoxHeight = 180;
+  static const double _lyricsEdgePadding = _lyricsBoxHeight / 2 - 16;
+
   @override
   void dispose() {
     _lyricsScrollController.dispose();
     super.dispose();
   }
 
-  void _scrollToActiveLyric(int index) {
+  void _scrollToActiveLyric(int index, int lineCount, {int attempt = 0}) {
     if (index == _lastAutoScrolledIndex || !_lyricsScrollController.hasClients) return;
     _lastAutoScrolledIndex = index;
 
-    final targetOffset = (index * 42.0).clamp(
-      0.0,
-      _lyricsScrollController.position.maxScrollExtent,
-    );
+    final lineContext = _activeLineKey.currentContext;
+    if (lineContext != null) {
+      // La línea está construida: se centra con su posición y alto reales.
+      Scrollable.ensureVisible(
+        lineContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      return;
+    }
 
-    _lyricsScrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    // La línea quedó fuera de lo construido (un salto grande con seek): se
+    // acerca con el alto PROMEDIO medido de las líneas y en el próximo cuadro
+    // se centra con precisión.
+    final position = _lyricsScrollController.position;
+    final contentHeight = position.maxScrollExtent + position.viewportDimension - 2 * _lyricsEdgePadding;
+    final averageLine = lineCount > 0 ? contentHeight / lineCount : 0.0;
+    _lyricsScrollController.jumpTo((index * averageLine).clamp(0.0, position.maxScrollExtent));
+    if (attempt >= 2) return; // ya quedó cerca: no se insiste más
+    _lastAutoScrolledIndex = -1;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToActiveLyric(index, lineCount, attempt: attempt + 1);
+    });
   }
 
   String _formatDuration(Duration duration) {
@@ -74,7 +99,7 @@ class _NowPlayingModalState extends State<NowPlayingModal> {
     final lyricIndex = playerVM.currentLyricIndex;
     if (lyricIndex >= 0 && lyricIndex != _lastAutoScrolledIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToActiveLyric(lyricIndex);
+        if (mounted) _scrollToActiveLyric(lyricIndex, playerVM.lyrics.length);
       });
     }
 
@@ -341,14 +366,16 @@ class _NowPlayingModalState extends State<NowPlayingModal> {
                                   ),
                                 )
                                 : SizedBox(
-                                  height: 180,
+                                  height: _lyricsBoxHeight,
                                   child: ListView.builder(
                                     controller: _lyricsScrollController,
+                                    padding: const EdgeInsets.symmetric(vertical: _lyricsEdgePadding),
                                     itemCount: lines.length,
                                     itemBuilder: (context, idx) {
                                       final line = lines[idx];
                                       final isActive = idx == playerVM.currentLyricIndex;
                                       return Padding(
+                                        key: isActive ? _activeLineKey : null,
                                         padding: const EdgeInsets.symmetric(vertical: 6),
                                         child: Text(
                                           line.text,
