@@ -1,4 +1,5 @@
 import 'package:streamtunes/domain/models/band.dart';
+import 'package:streamtunes/domain/models/band_overview.dart';
 import 'package:streamtunes/domain/models/report.dart';
 import 'package:streamtunes/data/repositories/moderation/moderation_repository.dart';
 
@@ -30,6 +31,45 @@ class FakeModerationRepository implements ModerationRepository {
       bandName: 'Los Fuzzers',
     ),
   ];
+
+  /// Bandas ya aprobadas o suspendidas (las pendientes están en _pendingBands).
+  final List<Band> _otherBands = [
+    Band(
+      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      slug: 'los-fuzzers',
+      name: 'Los Fuzzers',
+      bio: 'Garage rock de sótano.',
+      genre: 'Rock',
+      location: 'Buenos Aires, AR',
+      status: BandStatus.approved,
+      followerCount: 128,
+      createdAt: DateTime.now().subtract(const Duration(days: 40)),
+    ),
+    Band(
+      id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      slug: 'cumbia-del-conurbano',
+      name: 'Cumbia del Conurbano',
+      genre: 'Cumbia',
+      location: 'Lanús, AR',
+      status: BandStatus.suspended,
+      followerCount: 12,
+      createdAt: DateTime.now().subtract(const Duration(days: 10)),
+    ),
+  ];
+
+  @override
+  Future<List<BandOverview>> getAllBands() async => [
+        for (final b in [..._pendingBands, ..._otherBands])
+          BandOverview(band: b, songCount: b.isApproved ? 3 : 0, ownerName: 'Usuario de prueba'),
+      ];
+
+  @override
+  Future<void> setBandStatus(String bandId, BandStatus status) async {
+    for (final list in [_pendingBands, _otherBands]) {
+      final idx = list.indexWhere((b) => b.id == bandId);
+      if (idx != -1) list[idx] = list[idx].copyWith(status: status);
+    }
+  }
 
   @override
   Future<List<Band>> getPendingBands() async {

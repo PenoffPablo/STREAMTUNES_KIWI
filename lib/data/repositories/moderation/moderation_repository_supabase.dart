@@ -1,4 +1,5 @@
 import 'package:streamtunes/domain/models/band.dart';
+import 'package:streamtunes/domain/models/band_overview.dart';
 import 'package:streamtunes/domain/models/report.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:streamtunes/data/repositories/moderation/moderation_repository.dart';
@@ -20,6 +21,21 @@ class SupabaseModerationRepository implements ModerationRepository {
                 .order('created_at', ascending: true))
             .withNetworkTimeout();
     return (res as List).map((json) => Band.fromJson(json)).toList();
+  }
+
+  @override
+  Future<List<BandOverview>> getAllBands() async {
+    final res = await (_client
+            .from('bands')
+            .select('*, band_follows(count), songs(count), owner:profiles!bands_created_by_fkey(display_name)')
+            .order('created_at', ascending: false))
+        .withNetworkTimeout();
+    return (res as List).map((json) => BandOverview.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  @override
+  Future<void> setBandStatus(String bandId, BandStatus status) async {
+    await (_client.from('bands').update({'status': status.toDbString()}).eq('id', bandId)).withNetworkTimeout();
   }
 
   @override

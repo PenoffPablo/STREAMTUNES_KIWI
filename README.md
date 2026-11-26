@@ -319,6 +319,9 @@ La migración `20261126020000_band_registration_guards.sql` acompaña el registr
 ### Registro de bandas
 En **Cuenta**, un usuario con cuenta y sin banda toca **Registrar mi banda** y completa nombre, género, ciudad, biografía y foto. La banda queda **en revisión**: aparece en el panel de moderación y, mientras tanto, el usuario ve "en revisión" (con el botón "¿Ya la aprobaron?"). Cuando un moderador la aprueba, se habilitan **Subir** y **Mi Banda**.
 
+### Bandas del colectivo (moderación)
+En el panel de moderación, **Bandas del colectivo** lista todas las bandas (aprobadas, pendientes y suspendidas) con foto, nombre, estado, género, ciudad, creador, seguidores, cantidad de temas, fecha de alta y bio. Se filtra por estado (con contadores), género y búsqueda por nombre, ciudad o creador (sin importar tildes), y se ordena por fecha, nombre, seguidores o temas. Desde cada banda se puede aprobar, rechazar, suspender (con confirmación), reactivar o abrir su perfil público.
+
 ### Perfil de la banda
 En **Mi Banda → Editar perfil**, la banda cambia su foto, nombre, género, ciudad, biografía, meta de recaudación, redes (Instagram, Spotify y YouTube) y el link a su tienda de merch. Las redes aparecen como botones en el perfil público. La dirección de la banda (la del QR) no cambia al cambiar el nombre, para que los QR impresos sigan funcionando. La app solo envía las columnas editables: el estado y lo recaudado no se tocan desde ahí (y la base lo impide igual).
 

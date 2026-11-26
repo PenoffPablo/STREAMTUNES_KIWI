@@ -7,6 +7,7 @@ import 'package:streamtunes/ui/admin/view_models/admin_moderation_view_model.dar
 import 'package:streamtunes/ui/core/widgets/empty_state_view.dart';
 import 'package:streamtunes/domain/models/band_payout.dart';
 import 'package:streamtunes/ui/admin/widgets/payout_dialog.dart';
+import 'package:streamtunes/ui/admin/widgets/admin_bands_view.dart';
 import 'package:streamtunes/ui/admin/widgets/admin_section_header.dart';
 import 'package:streamtunes/ui/admin/widgets/kiwi_commission_card.dart';
 import 'package:streamtunes/ui/admin/widgets/payouts_section.dart';
@@ -67,7 +68,14 @@ class _AdminModerationViewState extends State<AdminModerationView> {
                 Expanded(child: Text('Moderación', overflow: TextOverflow.ellipsis)),
               ],
             ),
-            actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => vm.loadModerationData())],
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.groups),
+                tooltip: 'Bandas del colectivo',
+                onPressed: _openBands,
+              ),
+              IconButton(icon: const Icon(Icons.refresh), onPressed: () => vm.loadModerationData()),
+            ],
           ),
           body: vm.isLoading
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
@@ -103,6 +111,22 @@ class _AdminModerationViewState extends State<AdminModerationView> {
 
                     // Liquidaciones: lo que KIWI cobró y le debe a cada banda
                     PayoutsSection(viewModel: vm, onPay: _pay, onMarkRefunded: _markRefunded),
+                    const SizedBox(height: 20),
+
+                    // Todas las bandas: aprobadas, pendientes y suspendidas, con filtros
+                    Card(
+                      margin: EdgeInsets.zero,
+                      child: ListTile(
+                        leading: const Icon(Icons.groups, color: AppTheme.primary),
+                        title: const Text('Bandas del colectivo', style: TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: const Text(
+                          'Todas las bandas con su estado, género, seguidores y temas. Filtrá y moderá.',
+                          style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _openBands,
+                      ),
+                    ),
                     const SizedBox(height: 20),
 
                     // 2. Bandas Pendientes de Aprobación (Filtro anti-copyright y calidad)
@@ -157,6 +181,13 @@ class _AdminModerationViewState extends State<AdminModerationView> {
         );
       },
     );
+  }
+
+  /// Abre "Bandas del colectivo". Al volver se recarga el panel: desde ahí
+  /// se pueden aprobar o suspender bandas.
+  Future<void> _openBands() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AdminBandsView()));
+    if (mounted) await _viewModel.loadModerationData();
   }
 
   Future<void> _pay(BandBalance balance) async {
