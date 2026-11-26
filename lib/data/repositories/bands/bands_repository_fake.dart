@@ -143,6 +143,10 @@ class FakeBandsRepository implements BandsRepository {
     return newBand;
   }
 
+  /// Sin servidor: la "URL" es la ruta local (Image.file en modo offline).
+  @override
+  Future<String> uploadBandCover(String bandId, String localPath) async => localPath;
+
   @override
   Future<Band> updateBand(Band band) async {
     final idx = _bands.indexWhere((b) => b.id == band.id);

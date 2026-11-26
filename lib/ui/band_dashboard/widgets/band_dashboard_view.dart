@@ -15,6 +15,8 @@ import 'package:streamtunes/ui/band_dashboard/widgets/band_qr_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/daily_metrics_section.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/events_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/kiwi_account_card.dart';
+import 'package:streamtunes/ui/band_dashboard/widgets/band_profile_card.dart';
+import 'package:streamtunes/ui/band_dashboard/widgets/edit_band_profile_view.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/merch_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/photos_card.dart';
 import 'package:streamtunes/ui/band_dashboard/widgets/songs_management_card.dart';
@@ -202,6 +204,15 @@ class _BandDashboardViewState extends State<BandDashboardView> {
               : ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   children: [
+                    // Perfil público de la banda (foto, nombre, bio, redes): editable
+                    BandProfileCard(
+                      band: band,
+                      onEdit: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => EditBandProfileView(viewModel: _viewModel!)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
                     // 1. Tarjeta con QR Generado Offline para Recitales
                     BandQrCard(band: band),
                     const SizedBox(height: 16),

@@ -334,6 +334,115 @@ class BandDashboardViewModel extends ViewModel {
     }
   }
 
+  bool _isSavingProfile = false;
+  String? _profileError;
+
+  /// Se está guardando el perfil de la banda (foto, nombre, bio...).
+  bool get isSavingProfile => _isSavingProfile;
+
+  /// Por qué no se pudo guardar el perfil (se muestra en el formulario).
+  String? get profileError => _profileError;
+
+  static const int maxNameLength = 60;
+  static const int maxBioLength = 500;
+
+  /// Normaliza un link: vacío -> null; sin "http" se le agrega "https://".
+  /// Devuelve `false` en `.$2` si no parece una dirección web.
+  static (String?, bool) normalizeLink(String? raw) {
+    final text = raw?.trim() ?? '';
+    if (text.isEmpty) return (null, true);
+    final url = text.startsWith('http://') || text.startsWith('https://') ? text : 'https://$text';
+    final uri = Uri.tryParse(url);
+    final ok = uri != null && uri.host.contains('.') && !url.contains(' ');
+    return (url, ok);
+  }
+
+  /// Guarda el perfil de la banda. Si [newCoverPath] es una foto nueva, la
+  /// sube primero. Devuelve `true` si quedó guardado; si no, el motivo queda
+  /// en [profileError] y los datos anteriores siguen intactos.
+  Future<bool> updateProfile({
+    required String name,
+    required String genre,
+    String? location,
+    String? bio,
+    required double donationGoal,
+    Map<String, String> socialLinks = const {},
+    String? merchUrl,
+    String? newCoverPath,
+  }) async {
+    final current = _band;
+    if (current == null || _isSavingProfile) return false;
+
+    final cleanName = name.trim();
+    final cleanBio = bio?.trim() ?? '';
+    final links = <String, dynamic>{};
+    String? problem;
+    if (cleanName.length < 2) {
+      problem = 'Escribí el nombre de la banda.';
+    } else if (cleanName.length > maxNameLength) {
+      problem = 'El nombre puede tener hasta $maxNameLength caracteres.';
+    } else if (cleanBio.length > maxBioLength) {
+      problem = 'La biografía puede tener hasta $maxBioLength caracteres.';
+    } else if (donationGoal < 0 || donationGoal > 100000000) {
+      problem = 'La meta de recaudación tiene que ser un monto entre \$0 y \$100.000.000.';
+    }
+    for (final entry in socialLinks.entries) {
+      if (problem != null) break;
+      final (url, ok) = normalizeLink(entry.value);
+      if (!ok) problem = 'El link de ${kBandSocialNetworks[entry.key] ?? entry.key} no parece una dirección web.';
+      if (url != null) links[entry.key] = url;
+    }
+    final (merch, merchOk) = normalizeLink(merchUrl);
+    if (problem == null && !merchOk) problem = 'El link de la tienda no parece una dirección web.';
+    if (problem != null) {
+      _profileError = problem;
+      notifyListeners();
+      return false;
+    }
+
+    _isSavingProfile = true;
+    _profileError = null;
+    notifyListeners();
+    try {
+      var coverUrl = current.coverUrl;
+      if (newCoverPath != null) coverUrl = await bandsRepo.uploadBandCover(bandId, newCoverPath);
+
+      // Se conservan las otras redes que pudiera tener guardadas.
+      final mergedLinks = {...current.socialLinks}
+        ..removeWhere((k, _) => kBandSocialNetworks.containsKey(k))
+        ..addAll(links);
+
+      // Se arma explícitamente (no copyWith): así borrar la ciudad, la bio o
+      // el link de merch deja el campo vacío en vez de conservar el anterior.
+      final saved = await bandsRepo.updateBand(Band(
+        id: current.id,
+        slug: current.slug, // no cambia: es la dirección del QR ya impreso
+        name: cleanName,
+        genre: genre,
+        location: (location?.trim().isEmpty ?? true) ? null : location!.trim(),
+        bio: cleanBio.isEmpty ? null : cleanBio,
+        coverUrl: coverUrl,
+        merchUrl: merch,
+        socialLinks: mergedLinks,
+        donationGoal: donationGoal,
+        donationsCollected: current.donationsCollected,
+        status: current.status,
+        createdBy: current.createdBy,
+        createdAt: current.createdAt,
+        followerCount: current.followerCount,
+      ));
+      if (isDisposed) return true;
+      _band = saved;
+      return true;
+    } catch (e) {
+      _profileError = 'No se pudo guardar el perfil de la banda. ${describeError(e)}';
+      return false;
+    } finally {
+      _isSavingProfile = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> updateMerchUrl(String merchUrl) async {
     if (_band == null) return;
     try {

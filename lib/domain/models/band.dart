@@ -14,6 +14,13 @@ const List<String> kBandGenres = [
   'Otro',
 ];
 
+/// Redes que la banda puede mostrar en su perfil (clave en `social_links`).
+const Map<String, String> kBandSocialNetworks = {
+  'instagram': 'Instagram',
+  'spotify': 'Spotify',
+  'youtube': 'YouTube',
+};
+
 enum BandStatus {
   pending,
   approved,

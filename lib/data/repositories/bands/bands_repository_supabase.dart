@@ -118,14 +118,8 @@ class SupabaseBandsRepository implements BandsRepository {
     final localCover = band.coverUrl;
     if (localCover != null && localCover.isNotEmpty && !localCover.startsWith('http') && !kIsWeb) {
       try {
-        final file = File(localCover);
-        if (file.existsSync()) {
-          final path = '${created.id}/band_cover_${DateTime.now().millisecondsSinceEpoch}.jpg';
-          await (_client.storage
-                  .from('covers')
-                  .upload(path, file, fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg')))
-              .withNetworkTimeout(const Duration(seconds: 60));
-          final url = _client.storage.from('covers').getPublicUrl(path);
+        if (File(localCover).existsSync()) {
+          final url = await uploadBandCover(created.id, localCover);
           await (_client.from('bands').update({'cover_url': url}).eq('id', created.id)).withNetworkTimeout();
           created = created.copyWith(coverUrl: url);
         }
@@ -136,17 +130,35 @@ class SupabaseBandsRepository implements BandsRepository {
     return created!;
   }
 
+  /// Solo las columnas que el dueño puede editar. Antes se mandaba la banda
+  /// entera: un `donations_collected` viejo (entró un aporte con el panel
+  /// abierto) hacía que la base rechazara cualquier edición.
+  static Map<String, dynamic> _editableColumns(Band band) => {
+        'name': band.name.trim(),
+        'genre': band.genre,
+        'location': band.location,
+        'bio': band.bio,
+        'cover_url': band.coverUrl,
+        'merch_url': band.merchUrl,
+        'social_links': band.socialLinks,
+        'donation_goal': band.donationGoal,
+      };
+
   @override
   Future<Band> updateBand(Band band) async {
-    final res =
-        await (_client
-                .from('bands')
-                .update(band.toJson())
-                .eq('id', band.id)
-                .select()
-                .single())
-            .withNetworkTimeout();
-    return Band.fromJson(res);
+    final res = await (_client.from('bands').update(_editableColumns(band)).eq('id', band.id).select().single())
+        .withNetworkTimeout();
+    return Band.fromJson(res, followerCount: band.followerCount);
+  }
+
+  @override
+  Future<String> uploadBandCover(String bandId, String localPath) async {
+    final path = '$bandId/band_cover_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await (_client.storage
+            .from('covers')
+            .upload(path, File(localPath), fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg')))
+        .withNetworkTimeout(const Duration(seconds: 60));
+    return _client.storage.from('covers').getPublicUrl(path);
   }
 
   @override

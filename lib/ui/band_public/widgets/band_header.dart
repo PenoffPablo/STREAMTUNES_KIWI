@@ -90,6 +90,23 @@ class BandHeader extends StatelessWidget {
             const SizedBox(height: 12),
             Text(band.bio!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.4)),
           ],
+          // Redes de la banda (las que cargó en "Editar perfil")
+          if (kBandSocialNetworks.keys.any((k) => (band.socialLinks[k] as String?)?.isNotEmpty ?? false)) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final e in kBandSocialNetworks.entries)
+                  if ((band.socialLinks[e.key] as String?)?.isNotEmpty ?? false)
+                    OutlinedButton.icon(
+                      onPressed: () => onOpenLink(band.socialLinks[e.key] as String),
+                      icon: Icon(_socialIcon(e.key), size: 16),
+                      label: Text(e.value),
+                    ),
+              ],
+            ),
+          ],
           if (band.merchUrl != null && band.merchUrl!.isNotEmpty) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -103,3 +120,10 @@ class BandHeader extends StatelessWidget {
     );
   }
 }
+
+IconData _socialIcon(String network) => switch (network) {
+      'instagram' => Icons.camera_alt_outlined,
+      'spotify' => Icons.graphic_eq,
+      'youtube' => Icons.smart_display_outlined,
+      _ => Icons.link,
+    };

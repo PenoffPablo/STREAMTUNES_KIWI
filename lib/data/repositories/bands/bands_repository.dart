@@ -12,7 +12,12 @@ abstract class BandsRepository {
   Future<Band?> getBandById(String id);
   Future<Band?> getBandBySlug(String slug);
   Future<Band> createBand(Band band, String userId);
+  /// Guarda los datos EDITABLES de la banda (nombre, género, ciudad, bio,
+  /// foto, meta, redes y merch). Estado y recaudación no se tocan desde acá.
   Future<Band> updateBand(Band band);
+
+  /// Sube la foto de la banda y devuelve su URL pública.
+  Future<String> uploadBandCover(String bandId, String localPath);
   Future<bool> followBand(String bandId, String userId);
   Future<bool> unfollowBand(String bandId, String userId);
   Future<bool> isFollowing(String bandId, String userId);
