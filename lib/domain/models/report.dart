@@ -1,6 +1,9 @@
+/// Reporte de la comunidad. Puede ser sobre una canción ([songId]) o sobre
+/// una banda entera ([bandId]); la base exige al menos uno de los dos.
 class SongReport {
   final String id;
-  final String songId;
+  final String? songId;
+  final String? bandId;
   final String reporterUserId;
   final String reason;
   final String status; // 'open' | 'resolved' | 'dismissed'
@@ -10,7 +13,8 @@ class SongReport {
 
   const SongReport({
     required this.id,
-    required this.songId,
+    this.songId,
+    this.bandId,
     required this.reporterUserId,
     required this.reason,
     this.status = 'open',
@@ -21,9 +25,13 @@ class SongReport {
 
   bool get isOpen => status == 'open';
 
+  /// `true` si el reporte es sobre una canción (se puede ocultar el tema).
+  bool get isAboutSong => songId != null;
+
   SongReport copyWith({
     String? id,
     String? songId,
+    String? bandId,
     String? reporterUserId,
     String? reason,
     String? status,
@@ -34,6 +42,7 @@ class SongReport {
     return SongReport(
       id: id ?? this.id,
       songId: songId ?? this.songId,
+      bandId: bandId ?? this.bandId,
       reporterUserId: reporterUserId ?? this.reporterUserId,
       reason: reason ?? this.reason,
       status: status ?? this.status,
@@ -46,15 +55,21 @@ class SongReport {
   factory SongReport.fromJson(Map<String, dynamic> json, {String? songTitle, String? bandName}) {
     return SongReport(
       id: json['id'] as String,
-      songId: json['song_id'] as String,
-      reporterUserId: json['reporter_user_id'] as String,
-      reason: json['reason'] as String,
+      // Un reporte de banda no tiene canción: song_id llega vacío.
+      songId: json['song_id'] as String?,
+      bandId: json['band_id'] as String?,
+      // La columna real es reporter_id (reporter_user_id era un nombre viejo).
+      reporterUserId: (json['reporter_id'] ?? json['reporter_user_id']) as String? ?? '',
+      reason: json['reason'] as String? ?? '',
       status: json['status'] as String? ?? 'open',
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
       songTitle: songTitle ?? json['songs']?['title'] as String?,
-      bandName: bandName ?? json['songs']?['bands']?['name'] as String?,
+      // Reporte de canción: la banda viene por la canción; de banda, directo.
+      bandName: bandName ??
+          json['songs']?['bands']?['name'] as String? ??
+          json['bands']?['name'] as String?,
     );
   }
 
@@ -62,7 +77,8 @@ class SongReport {
     return {
       'id': id,
       'song_id': songId,
-      'reporter_user_id': reporterUserId,
+      'band_id': bandId,
+      'reporter_id': reporterUserId,
       'reason': reason,
       'status': status,
       'created_at': createdAt.toIso8601String(),

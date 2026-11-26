@@ -36,7 +36,7 @@ class SupabaseModerationRepository implements ModerationRepository {
     final res =
         await (_client
                 .from('reports')
-                .select('*, songs(title, bands(name))')
+                .select('*, songs(title, bands(name)), bands(name)')
                 .eq('status', 'open')
                 .order('created_at', ascending: false))
             .withNetworkTimeout();
@@ -55,9 +55,12 @@ class SupabaseModerationRepository implements ModerationRepository {
                   .eq('id', reportId)
                   .single())
               .withNetworkTimeout();
-      final songId = rep['song_id'] as String;
-      await (_client.from('songs').update({'hidden': true}).eq('id', songId))
-          .withNetworkTimeout();
+      // Un reporte de banda no tiene canción para ocultar: solo se resuelve.
+      final songId = rep['song_id'] as String?;
+      if (songId != null) {
+        await (_client.from('songs').update({'hidden': true}).eq('id', songId))
+            .withNetworkTimeout();
+      }
     }
     await (_client
             .from('reports')
@@ -70,7 +73,7 @@ class SupabaseModerationRepository implements ModerationRepository {
   Future<void> createReport(String songId, String userId, String reason) async {
     await (_client.from('reports').insert({
       'song_id': songId,
-      'reporter_user_id': userId,
+      'reporter_id': userId,
       'reason': reason,
       'status': 'open',
     })).withNetworkTimeout();

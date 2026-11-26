@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:streamtunes/domain/models/report.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
 
-/// Reporte de la comunidad sobre una canción: desestimar u ocultar el tema.
+/// Reporte de la comunidad sobre una canción (desestimar u ocultar el tema)
+/// o sobre una banda (desestimar o marcar como resuelto).
 class SongReportCard extends StatelessWidget {
   const SongReportCard({super.key, required this.report, required this.onDismiss, required this.onHideSong});
 
@@ -25,14 +26,16 @@ class SongReportCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Canción: "${report.songTitle ?? report.songId}"',
+                    report.isAboutSong
+                        ? 'Canción: "${report.songTitle ?? 'sin título'}"'
+                        : 'Reporte sobre la banda ${report.bandName ?? ''}'.trim(),
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            if (report.bandName != null)
+            if (report.isAboutSong && report.bandName != null)
               Text('Banda: ${report.bandName}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 8),
             Container(
@@ -53,7 +56,7 @@ class SongReportCard extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () => onHideSong(),
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed, foregroundColor: Colors.white),
-                  child: const Text('Ocultar Canción'),
+                  child: Text(report.isAboutSong ? 'Ocultar Canción' : 'Marcar resuelto'),
                 ),
               ],
             ),

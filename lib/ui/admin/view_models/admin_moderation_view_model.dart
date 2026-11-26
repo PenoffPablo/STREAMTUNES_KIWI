@@ -107,16 +107,19 @@ class AdminModerationViewModel extends ViewModel {
     notifyListeners();
 
     try {
+      // Cada sección carga por su cuenta: si una falla (por ejemplo, un dato
+      // que no se puede leer), las demás se muestran igual y el aviso dice
+      // cuál no cargó, en vez de tirar abajo todo el panel.
       final (bands, reports, config, _) = await (
-        moderationRepo.getPendingBands(),
-        moderationRepo.getOpenReports(),
+        _attempt(moderationRepo.getPendingBands, 'las bandas pendientes'),
+        _attempt(moderationRepo.getOpenReports, 'los reportes'),
         _attempt(configRepo.getConfig, 'la configuración (freno de emergencia y comisión)'),
         _reloadMoney(),
       ).wait;
-      _pendingBands = bands;
-      _openReports = reports;
+      if (bands.$1 != null) _pendingBands = bands.$1!;
+      if (reports.$1 != null) _openReports = reports.$1!;
       if (config.$1 != null) _config = config.$1!;
-      _errorMessage = config.$2;
+      _errorMessage = bands.$2 ?? reports.$2 ?? config.$2;
     } catch (e) {
       _errorMessage = 'No se pudo cargar el panel de moderación. ${describeError(e)}';
     } finally {
