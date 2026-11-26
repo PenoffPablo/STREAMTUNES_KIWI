@@ -19,6 +19,7 @@
 --   * 20261125010000_kiwi_commission.sql      (comisión de KIWI: 20% del neto)
 --   * 20261125020000_spend_cap_and_webhook_retry.sql (freno de emergencia que se
 --     guarda y reintentos del webhook sin pagos a devolver falsos)
+--   * 20261126010000_audio_bucket_formats.sql (el bucket audio acepta MP3, M4A y WAV)
 --
 -- No incluye objetos administrados por Supabase (esquemas auth/storage,
 -- event trigger `rls_auto_enable`) ni la tabla `usuarios`, que existe en la

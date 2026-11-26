@@ -7,6 +7,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:streamtunes/data/repositories/songs/songs_repository.dart';
 import 'package:streamtunes/utils/async_utils.dart';
 
+/// Tipo MIME de cada formato de audio que acepta la app (y el bucket 'audio').
+const Map<String, String> kAudioMimeTypes = {
+  'mp3': 'audio/mpeg',
+  'm4a': 'audio/mp4',
+  'wav': 'audio/wav',
+};
+
 /// Implementación real conectada a Supabase
 class SupabaseSongsRepository implements SongsRepository {
   final SupabaseClient _client;
@@ -72,6 +79,16 @@ class SupabaseSongsRepository implements SongsRepository {
     }
   }
 
+  /// Tipo MIME del audio. Un formato que la app no acepta se corta acá con un
+  /// mensaje claro, antes de mandar el archivo.
+  static String _audioMime(String ext) {
+    final mime = kAudioMimeTypes[ext];
+    if (mime == null) {
+      throw AppException('El formato .$ext no está permitido. Subí el tema en MP3, M4A o WAV.');
+    }
+    return mime;
+  }
+
   @override
   Future<Song> uploadSong(
     Song song, {
@@ -95,17 +112,17 @@ class SupabaseSongsRepository implements SongsRepository {
           .upload(
             remoteAudioPath,
             localAudio,
-            fileOptions: const FileOptions(upsert: true),
+            fileOptions: FileOptions(upsert: true, contentType: _audioMime(ext)),
           );
     } else if (audioBytes != null && audioBytes.isNotEmpty) {
-      remoteAudioPath =
-          '${song.bandId}/${stamp}_$safeTitle.${audioExtension ?? 'mp3'}';
+      final ext = (audioExtension ?? 'mp3').toLowerCase();
+      remoteAudioPath = '${song.bandId}/${stamp}_$safeTitle.$ext';
       await _client.storage
           .from('audio')
           .uploadBinary(
             remoteAudioPath,
             audioBytes,
-            fileOptions: const FileOptions(upsert: true),
+            fileOptions: FileOptions(upsert: true, contentType: _audioMime(ext)),
           );
     } else if (song.audioPath.startsWith('http')) {
       remoteAudioPath = song.audioPath; // ya está alojado remotamente

@@ -79,5 +79,18 @@ void main() {
       final text = describeError(StateError('Bad state: Instance of _Foo'));
       expect(text, isNot(contains('Instance of')));
     });
+
+    test('un formato rechazado por Storage NO se muestra como "sin conexión"', () {
+      final text = describeError(
+        const StorageException('mime type audio/mp4 is not supported', statusCode: '415'),
+      );
+      expect(text, contains('formato'));
+      expect(text, isNot(contains('conexión')));
+    });
+
+    test('un error de Storage desconocido tampoco culpa a la conexión', () {
+      final text = describeError(const StorageException('Bad Request', statusCode: '400'));
+      expect(text, isNot(contains('conexión')));
+    });
   });
 }

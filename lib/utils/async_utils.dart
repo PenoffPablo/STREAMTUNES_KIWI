@@ -104,11 +104,14 @@ String _describe(Object error) {
   }
   if (error is AppException) return error.message;
   if (error is TimeoutException) return const NetworkTimeoutException().message;
+  // Storage responde con su propio error (formato, tamaño, permisos): se
+  // revisa antes que la red para no mostrar "sin conexión" si el servidor
+  // contestó y rechazó el archivo.
+  if (error is StorageException) return _describeStorage(error);
   if (_isNetworkError(error)) return kNoConnectionMessage;
   if (error is PostgrestException) return _describeDatabase(error);
   if (error is AuthException) return _describeAuth(error);
   if (error is FunctionException) return _describeFunction(error);
-  if (error is StorageException) return _describeStorage(error);
   if (error is FormatException) {
     return 'El servidor respondió con datos inesperados. Intentá de nuevo en unos segundos.';
   }
@@ -225,10 +228,13 @@ String _describeStorage(StorageException e) {
   if (status == '413' || msg.contains('payload too large') || msg.contains('exceeded the maximum')) {
     return 'El archivo es demasiado grande para subirlo.';
   }
+  if (status == '415' || msg.contains('mime type') || msg.contains('invalid_mime')) {
+    return 'Ese formato de archivo no está permitido. Para audio, subí MP3, M4A o WAV; para imágenes, JPG, PNG o WEBP.';
+  }
   if (status == '403' || status == '401' || msg.contains('row-level security')) {
     return 'No tenés permiso para subir archivos en esta banda.';
   }
-  return 'No se pudo subir el archivo. Revisá tu conexión e intentá de nuevo.';
+  return 'El servidor no aceptó el archivo. Probá con otro archivo o intentá de nuevo en unos minutos.';
 }
 
 /// Heurística: el texto parece un volcado técnico, no un mensaje para personas.
