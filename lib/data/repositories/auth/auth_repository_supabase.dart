@@ -10,21 +10,40 @@ import 'package:streamtunes/utils/async_utils.dart';
 class SupabaseAuthRepository implements AuthRepository {
   final SupabaseClient _client;
   final _controller = StreamController<AppUser?>.broadcast();
+  final _expiredController = StreamController<void>.broadcast();
   AppUser? _cachedUser;
 
+  /// Número del último evento de sesión. Una carga de perfil que empezó con
+  /// un evento viejo no puede pisar a uno más nuevo: si la sesión vencida se
+  /// cierra mientras se cargaba el perfil, ese perfil ya no se aplica.
+  int _authGeneration = 0;
+
   SupabaseAuthRepository(this._client) {
-    _client.auth.onAuthStateChange.listen((data) async {
-      final session = data.session;
-      if (session == null) {
-        _cachedUser = null;
-        _controller.add(null);
-      } else {
-        await _fetchFullProfile(session.user.id);
-      }
-    });
+    _client.auth.onAuthStateChange.listen(
+      (data) async {
+        final generation = ++_authGeneration;
+        final session = data.session;
+        if (session == null) {
+          _cachedUser = null;
+          _controller.add(null);
+          if (data.event == AuthChangeEvent.signedOut && data.signOutReason == SignOutReason.sessionExpired) {
+            _expiredController.add(null);
+          }
+        } else {
+          await _fetchFullProfile(session.user.id, generation: generation);
+        }
+      },
+      // Sin red, la renovación del token se reintenta sola: no es un cierre
+      // de sesión, solo se registra.
+      onError: (Object e) => debugPrint('[SupabaseAuthRepository] Evento de sesión con error: $e'),
+    );
   }
 
-  Future<void> _fetchFullProfile(String userId) async {
+  /// La sesión sigue siendo la de [userId] y no llegó un evento más nuevo.
+  bool _isStillCurrent(String userId, int? generation) =>
+      (generation == null || generation == _authGeneration) && _client.auth.currentSession?.user.id == userId;
+
+  Future<void> _fetchFullProfile(String userId, {int? generation}) async {
     try {
       final profileRes =
           await (_client
@@ -67,6 +86,11 @@ class SupabaseAuthRepository implements AuthRepository {
         }
       } catch (_) {}
 
+      // Si mientras se cargaba la sesión venció (o cambió de usuario), este
+      // perfil es viejo: aplicarlo "reviviría" una sesión que ya no existe y
+      // todo lo que necesita permisos fallaría.
+      if (!_isStillCurrent(userId, generation)) return;
+
       if (profileRes != null) {
         _cachedUser = AppUser.fromJson(
           profileRes,
@@ -89,6 +113,9 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Stream<AppUser?> get authStateChanges => _controller.stream;
+
+  @override
+  Stream<void> get sessionExpired => _expiredController.stream;
 
   @override
   AppUser? get currentUser => _cachedUser;
@@ -166,5 +193,6 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   void dispose() {
     _controller.close();
+    _expiredController.close();
   }
 }

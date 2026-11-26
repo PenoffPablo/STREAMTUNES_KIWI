@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:streamtunes/data/repositories/auth/auth_repository_fake.dart';
@@ -161,6 +163,35 @@ void main() {
       expect(modVM.openReports.any((r) => r.id == reportId), isFalse);
 
       modVM.dispose();
+    });
+
+    testWidgets('si la sesión vence, cierra lo abierto y lleva al inicio de sesión con un aviso', (tester) async {
+      final sessionVM = SessionViewModel(authRepo: authRepo, bandsRepo: bandsRepo, configRepo: configRepo);
+      await sessionVM.init();
+      await sessionVM.signInWithEmail('fan@correo.com', 'pass123');
+
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(createNavigationWidget(sessionVM));
+      await tester.pumpAndSettle();
+
+      // Está en Biblioteca con una pantalla encima (como el panel de admin).
+      await tester.tap(find.text('Biblioteca').last);
+      await tester.pumpAndSettle();
+      final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+      unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('Pantalla abierta')))));
+      await tester.pumpAndSettle();
+      expect(find.text('Pantalla abierta'), findsOneWidget);
+
+      authRepo.expireSession();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pantalla abierta'), findsNothing, reason: 'se cierran las pantallas abiertas');
+      expect(find.text('Iniciar Sesión'), findsOneWidget, reason: 'queda en Cuenta, en el formulario de ingreso');
+      expect(find.textContaining('Tu sesión venció'), findsWidgets);
+      expect(sessionVM.currentUser, isNull);
     });
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:streamtunes/domain/models/band.dart';
+import 'package:streamtunes/ui/account/view_models/session_view_model.dart';
 import 'package:streamtunes/ui/core/scopes/app_scopes.dart';
 import 'package:streamtunes/ui/core/widgets/error_banner.dart';
 import 'package:streamtunes/ui/core/themes/app_theme.dart';
@@ -39,6 +40,7 @@ class _NavigationShellState extends State<NavigationShell> {
   late final NavigationViewModel _viewModel;
   StreamSubscription<Band>? _openBandSub;
   StreamSubscription<String>? _playerErrorSub;
+  StreamSubscription<void>? _sessionExpiredSub;
 
   @override
   void initState() {
@@ -51,6 +53,17 @@ class _NavigationShellState extends State<NavigationShell> {
     // El reproductor es global: sus errores se muestran desde acá, que está
     // montado mientras la app está abierta.
     _playerErrorSub = PlayerScope.read(context).errors.listen(_showPlayerError);
+    _sessionExpiredSub = SessionScope.read(context).sessionExpired.listen((_) => _goToLogin());
+  }
+
+  /// La sesión venció: se cierran las pantallas abiertas (panel de admin,
+  /// perfil de banda...) y se abre "Cuenta", donde está el inicio de sesión.
+  void _goToLogin() {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    // Sin sesión quedan las pestañas de visitante: Inicio y Cuenta.
+    _viewModel.selectTab(1, tabCount: 2);
+    showErrorSnackBar(context, title: 'Sesión vencida', message: SessionViewModel.sessionExpiredMessage);
   }
 
   void _showPlayerError(String message) {
@@ -69,6 +82,7 @@ class _NavigationShellState extends State<NavigationShell> {
   void dispose() {
     _openBandSub?.cancel();
     _playerErrorSub?.cancel();
+    _sessionExpiredSub?.cancel();
     _viewModel.dispose();
     super.dispose();
   }

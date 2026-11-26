@@ -4,6 +4,11 @@ import 'package:streamtunes/domain/models/app_user.dart';
 
 abstract class AuthRepository {
   Stream<AppUser?> get authStateChanges;
+
+  /// Avisa cuando la sesión venció y no se pudo renovar (por ejemplo, un
+  /// refresh token que el servidor ya no reconoce). En ese momento
+  /// [authStateChanges] ya emitió `null`: hay que volver a iniciar sesión.
+  Stream<void> get sessionExpired;
   AppUser? get currentUser;
   Future<AppUser> signInAnonymously();
   Future<AppUser> signInWithEmail(String email, String password);

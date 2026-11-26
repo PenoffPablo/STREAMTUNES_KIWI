@@ -30,6 +30,8 @@ class SessionViewModel extends ViewModel {
 
   StreamSubscription<(AppUser?, Band?)>? _authSub;
   StreamSubscription<String>? _tokenRefreshSub;
+  StreamSubscription<void>? _expiredSub;
+  final _sessionExpiredController = StreamController<void>.broadcast();
   String? _pushRegisteredFor;
   Future<void>? _initFuture;
   Future<int>? _syncInFlight;
@@ -44,6 +46,13 @@ class SessionViewModel extends ViewModel {
   });
 
   AppUser? get currentUser => _currentUser;
+
+  /// Mensaje que ve el usuario cuando su sesión venció.
+  static const sessionExpiredMessage = 'Tu sesión venció. Volvé a iniciar sesión para seguir.';
+
+  /// Evento puntual: la sesión venció. La navegación cierra las pantallas
+  /// abiertas y lleva a "Cuenta" para iniciar sesión de nuevo.
+  Stream<void> get sessionExpired => _sessionExpiredController.stream;
   Band? get activeBand => _activeBand;
   AppConfig get config => _config;
   bool get isLoading => _isLoading;
@@ -77,6 +86,14 @@ class SessionViewModel extends ViewModel {
             notifyListeners();
           },
         );
+    _expiredSub = authRepo.sessionExpired.listen((_) {
+      _currentUser = null;
+      _activeBand = null;
+      _pushRegisteredFor = null;
+      _errorMessage = sessionExpiredMessage;
+      notifyListeners();
+      if (!_sessionExpiredController.isClosed) _sessionExpiredController.add(null);
+    });
     // Si el token FCM rota, se vuelve a registrar para el usuario actual.
     _tokenRefreshSub = push?.onTokenRefresh.listen((token) async {
       try {
@@ -229,6 +246,8 @@ class SessionViewModel extends ViewModel {
   void dispose() {
     _authSub?.cancel();
     _tokenRefreshSub?.cancel();
+    _expiredSub?.cancel();
+    _sessionExpiredController.close();
     super.dispose();
   }
 }

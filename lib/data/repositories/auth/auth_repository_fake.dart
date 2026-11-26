@@ -7,6 +7,7 @@ import 'package:streamtunes/data/repositories/auth/auth_repository.dart';
 class FakeAuthRepository implements AuthRepository {
   AppUser? _user;
   final _controller = StreamController<AppUser?>.broadcast();
+  final _expiredController = StreamController<void>.broadcast();
 
   FakeAuthRepository({AppUser? initialUser}) {
     _user = initialUser;
@@ -17,6 +18,16 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   AppUser? get currentUser => _user;
+
+  @override
+  Stream<void> get sessionExpired => _expiredController.stream;
+
+  /// Simula una sesión que venció y no se pudo renovar (para tests).
+  void expireSession() {
+    _user = null;
+    _controller.add(null);
+    _expiredController.add(null);
+  }
 
   @override
   Future<AppUser> signInAnonymously() async {
@@ -100,5 +111,6 @@ class FakeAuthRepository implements AuthRepository {
   @override
   void dispose() {
     _controller.close();
+    _expiredController.close();
   }
 }
